@@ -125,6 +125,17 @@ canvas{display:block;width:100%;height:100%}
 .li{display:flex;align-items:center;gap:6px;padding:2px 0}
 .lsw{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .lnm{font-size:10px;color:var(--text2)}
+/* Layer depth number input (smaller than main param inputs) */
+.li input[type=number]{
+  width:46px;height:20px;z-index:4;
+  font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+  color:var(--text);background:var(--panel);
+  border:none;border-left:1px solid var(--border2);
+  padding:0 4px;text-align:right;outline:none;cursor:text;
+  -moz-appearance:textfield;position:absolute;right:0;top:50%;transform:translateY(-50%);
+}
+.li input[type=number]::-webkit-outer-spin-button,.li input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+.li input[type=number]:focus{background:var(--input-bg);color:var(--accent);border-left-color:var(--accent)}
 
 /* Info */
 .ig{display:grid;grid-template-columns:auto 1fr;gap:2px 8px}
@@ -204,6 +215,10 @@ canvas{display:block;width:100%;height:100%}
     </div>
     <div id="loader">Extruding…</div>
     <div id="cstat">L: rotate · R: pan · Scroll: zoom</div>
+    <div id="open-legend" style="display:none;position:absolute;bottom:26px;left:10px;font-size:10px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,.55);pointer-events:none;display:flex;align-items:center;gap:6px">
+      <svg width="24" height="8" viewBox="0 0 24 8"><line x1="0" y1="4" x2="24" y2="4" stroke="#ff3333" stroke-width="2"/></svg>
+      <span>unclosed path</span>
+    </div>
   </div>
 
   <!-- Sidebar -->
@@ -363,13 +378,15 @@ canvas{display:block;width:100%;height:100%}
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
 const P = { depth:40, seg:24, bsize:3, bseg:3, metal:0, rough:1 };
-const F = { bevel:false, wf:false, sw:false, edge:false, bg:false };
+const F = { bevel:false, wf:false, sw:false, edge:true, bg:false };
 let swColor='#ff6b35', edgeColor='#ffffff', bgColor='#222222';
 
-let scene, camera, renderer, root, edgeRoot, autoRot=false;
+let scene, camera, renderer, root, edgeRoot, debugRoot, autoRot=false;
 let drag=false, rBtn=false, px=0, py=0;
 let faceMats={}, sidewallMat=null;
 let parsed=null;
+// Per-layer depth overrides: hex → depth value (or null = use global P.depth)
+const layerDepths = {};
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function boot(){
@@ -397,9 +414,11 @@ let parsed=null;
     if(rBtn){
       root.position.x+=dx*.22;root.position.y-=dy*.22;
       if(edgeRoot){edgeRoot.position.x=root.position.x;edgeRoot.position.y=root.position.y;}
+      if(debugRoot){debugRoot.position.x=root.position.x;debugRoot.position.y=root.position.y;}
     } else {
       root.rotation.y+=dx*.007;root.rotation.x+=dy*.007;
       if(edgeRoot){edgeRoot.rotation.y=root.rotation.y;edgeRoot.rotation.x=root.rotation.x;}
+      if(debugRoot){debugRoot.rotation.y=root.rotation.y;debugRoot.rotation.x=root.rotation.x;}
     }
     px=e.clientX;py=e.clientY;
   });
@@ -431,11 +450,16 @@ let parsed=null;
   setSwatch('edge', '#ffffff');
   setSwatch('bg', '#222222');
 
+  // Edge lines on by default — sync UI toggle
+  document.getElementById('tgl-edge').classList.add('on');
+  document.getElementById('edge-params').classList.remove('disabled');
+
   (function loop(){
     requestAnimationFrame(loop);
     if(root&&autoRot&&!drag){
       root.rotation.y+=.005;
-      if(edgeRoot)edgeRoot.rotation.y=root.rotation.y;
+      if(edgeRoot){edgeRoot.rotation.y=root.rotation.y;}
+      if(debugRoot){debugRoot.rotation.y=root.rotation.y;}
     }
     renderer.render(scene,camera);
   })();
@@ -584,25 +608,57 @@ function rebuild(){
   const sPos=root?root.position.clone():null;
 
   if(root){scene.remove(root);root.traverse(o=>{if(o.isMesh)o.geometry.dispose();});}
-  root=new THREE.Group();faceMats={};sidewallMat=null;
+  if(edgeRoot){scene.remove(edgeRoot);edgeRoot.traverse(o=>{if(o.isLineSegments)o.geometry.dispose();});}
+  if(debugRoot){scene.remove(debugRoot);debugRoot.traverse(o=>{if(o.isLine||o.isLineSegments)o.geometry.dispose();});}
+  root=new THREE.Group();edgeRoot=null;debugRoot=null;
+  faceMats={};sidewallMat=null;
 
   const sc=200/Math.max(vb.w,vb.h);
-  const depthU=P.depth*sc*.5;
   const bsizeU=P.bsize*sc*.25;
+  const baseDepthU=P.depth*sc*.5;
 
   if(F.sw)sidewallMat=mkMat(swColor);
 
   const layEl=document.getElementById('lay-list');layEl.innerHTML='';
   let tv=0,tf=0;
+  let totalOpen=0;
 
-  Object.entries(byColor).forEach(([hex,els])=>{
-    const shapes=makeCompound(els);if(!shapes.length)return;
+  // meshes that contain open contours → need red edge highlight
+  const openMeshIndices=new Set();
+
+  Object.entries(byColor).forEach(([hex,els],layIdx)=>{
+    const allContours=[], openFlags=[];
+
+    els.forEach(el=>{
+      sampleEl(el).forEach(pts=>{
+        if(pts.length<3)return;
+        const dx=pts[0].x-pts[pts.length-1].x, dy=pts[0].y-pts[pts.length-1].y;
+        const isOpen=Math.sqrt(dx*dx+dy*dy)>2;
+        if(isOpen){
+          // Force-close: add a copy of first point at the end
+          pts.push({x:pts[0].x, y:pts[0].y});
+        }
+        const a=signedArea(pts),bb=getBB(pts);
+        allContours.push({pts,a,bb,abs:Math.abs(a)});
+        openFlags.push(isOpen);
+      });
+    });
+
+    const hasOpen=openFlags.some(Boolean);
+    if(hasOpen)totalOpen+=openFlags.filter(Boolean).length;
+
+    const shapes=buildCompoundFromContours(allContours);
+    if(!shapes.length){
+      appendLayerItem(layEl,hex,0,layIdx,openFlags.filter(Boolean).length,true);
+      return;
+    }
+
+    const layDepth=layerDepths[hex]!=null ? layerDepths[hex]*sc*.5 : baseDepthU;
     const opts={
-      depth:depthU,
+      depth:layDepth,
       bevelEnabled:F.bevel&&P.bsize>0,
       bevelThickness:bsizeU,bevelSize:bsizeU*.8,
-      bevelSegments:P.bseg,
-      curveSegments:P.seg   // ← correctly passed here
+      bevelSegments:P.bseg,curveSegments:P.seg
     };
     let geo;try{geo=new THREE.ExtrudeGeometry(shapes,opts);}catch(e){console.warn(hex,e);return;}
     faceMats[hex]=mkMat(hex);
@@ -615,33 +671,101 @@ function rebuild(){
     }
     mesh.scale.set(sc,-sc,sc);
     mesh.position.set(-(vb.x+vb.w/2)*sc,(vb.y+vb.h/2)*sc,0);
+    mesh.userData.faceColor=hex;
+    mesh.userData.hasOpen=hasOpen;
     root.add(mesh);
+    if(hasOpen)openMeshIndices.add(root.children.length-1);
+
     tv+=geo.attributes.position.count;
     tf+=Math.round((geo.index?geo.index.count:geo.attributes.position.count)/3);
-    const li=document.createElement('div');li.className='li';
-    li.innerHTML=`<div class="lsw" style="background:${hex}"></div><span class="lnm">${hex} · ${els.length}</span>`;
-    layEl.appendChild(li);
+    appendLayerItem(layEl,hex,layDepth/sc/.5,layIdx,openFlags.filter(Boolean).length,false);
   });
 
   if(sRot){root.rotation.copy(sRot);root.position.copy(sPos);}
   scene.add(root);
+
   document.getElementById('inf').innerHTML=
     `<span>Vtx</span><span>${tv.toLocaleString()}</span><span>Faces</span><span>${tf.toLocaleString()}</span><span>Colors</span><span>${Object.keys(byColor).length}</span>`;
-  rebuildEdges();
+
+  // Show/hide viewport legend for unclosed paths
+  const legend=document.getElementById('open-legend');
+  if(legend)legend.style.display=totalOpen>0?'flex':'none';
+
+  rebuildEdges(openMeshIndices);
 }
 
-// ── Edge lines ────────────────────────────────────────────────────────────────
-function rebuildEdges(){
+function appendLayerItem(layEl,hex,depthVal,layIdx,openCount,noGeo){
+  const li=document.createElement('div');
+  li.className='li';
+  li.style.cssText='flex-direction:column;align-items:stretch;gap:3px;padding:4px 0;border-bottom:0.5px solid var(--border)';
+  const stored=layerDepths[hex];
+  const dv=stored!=null?stored:P.depth;
+  const warn=openCount>0?`<span style="color:#ff4444;font-size:9px;margin-left:4px">⚠ ${openCount} open</span>`:'';
+  li.innerHTML=`
+    <div style="display:flex;align-items:center;gap:5px">
+      <div class="lsw" style="background:${hex};flex-shrink:0"></div>
+      <span class="lnm" style="flex:1">${hex}</span>
+      ${warn}
+    </div>
+    <div style="display:flex;align-items:center;gap:4px;padding-left:16px">
+      <span style="font-size:9px;color:var(--text3);width:36px;flex-shrink:0">depth</span>
+      <div class="track" style="flex:1;height:24px;min-width:0">
+        <input type="range" min="1" max="200" step="1" value="${dv}"
+          style="--pct:${((dv-1)/199*100).toFixed(1)}%"
+          oninput="setLayerDepth('${hex}',+this.value,this)">
+        <input type="number" min="1" max="500" value="${dv}"
+          style="font-size:10px"
+          oninput="setLayerDepth('${hex}',+this.value,null,this)">
+      </div>
+    </div>`;
+  layEl.appendChild(li);
+}
+
+function setLayerDepth(hex,val,sliderEl,numEl){
+  val=Math.max(1,isNaN(val)?1:val);
+  layerDepths[hex]=val;
+  // sync sibling inputs in the same row
+  const li=sliderEl?sliderEl.closest('.li'):numEl?numEl.closest('.li'):null;
+  if(li){
+    const sl=li.querySelector('input[type=range]');
+    const nu=li.querySelector('input[type=number]');
+    if(sl&&sl!==sliderEl){sl.value=Math.min(200,val);const pct=((Math.min(200,val)-1)/199*100).toFixed(1);sl.style.setProperty('--pct',pct+'%');}
+    if(nu&&nu!==numEl)nu.value=val;
+  }
+  rebuild();
+}
+
+// Compound builder from pre-collected contours (reused from rebuild)
+function buildCompoundFromContours(contours){
+  contours.sort((a,b)=>b.abs-a.abs);
+  const result=[],used=new Set();
+  for(let i=0;i<contours.length;i++){
+    if(used.has(i))continue;used.add(i);
+    const outer=contours[i];
+    const shape=new THREE.Shape();trPts(shape,outer.pts);
+    for(let j=i+1;j<contours.length;j++){
+      if(used.has(j))continue;const inn=contours[j];
+      if(inn.abs<outer.abs*.95&&bbInside(outer.bb,inn.bb)){const hole=new THREE.Path();trPts(hole,inn.pts);shape.holes.push(hole);used.add(j);}
+    }
+    result.push(shape);
+  }
+  return result;
+}
+
+// ── Edge lines — normal white, red for meshes with open contours ──────────────
+function rebuildEdges(openMeshIndices){
   if(edgeRoot){scene.remove(edgeRoot);edgeRoot.traverse(o=>{if(o.isLineSegments)o.geometry.dispose();});}
   edgeRoot=null;
   if(!F.edge||!root)return;
   edgeRoot=new THREE.Group();
   edgeRoot.rotation.copy(root.rotation);edgeRoot.position.copy(root.position);
-  const lm=new THREE.LineBasicMaterial({color:new THREE.Color(edgeColor),linewidth:1});
-  root.children.forEach(mesh=>{
+  const normalMat=new THREE.LineBasicMaterial({color:new THREE.Color(edgeColor),linewidth:1});
+  const redMat=new THREE.LineBasicMaterial({color:0xff2222,linewidth:1});
+  root.children.forEach((mesh,idx)=>{
     if(!mesh.isMesh)return;
+    const isOpen=mesh.userData.hasOpen===true;
     const eg=new THREE.EdgesGeometry(mesh.geometry,15);
-    const ls=new THREE.LineSegments(eg,lm);
+    const ls=new THREE.LineSegments(eg, isOpen ? redMat.clone() : normalMat.clone());
     ls.scale.copy(mesh.scale);ls.position.copy(mesh.position);
     edgeRoot.add(ls);
   });
@@ -673,27 +797,40 @@ function downloadBlob(blob,name){
   setTimeout(()=>URL.revokeObjectURL(a.href),10000);
 }
 
-// OBJ export
+// OBJ + MTL export (with per-mesh face colors)
 function exportOBJ(fname){
-  let v='',n='',uv='',f='';let vi=1;
-  root.children.forEach(mesh=>{
+  const base=fname.replace(/\.obj$/i,'');
+  let mtl='# MTL by SVG→3D\n\n';
+  let obj=`# OBJ by SVG→3D\nmtllib ${base}.mtl\n\n`;
+  let vi=1; const matNames=new Set();
+
+  root.children.forEach((mesh,mi)=>{
     if(!mesh.isMesh)return;
-    const geo=mesh.geometry.clone();
-    geo.applyMatrix4(mesh.matrixWorld);
+    const hex=(mesh.userData.faceColor||'#888888').replace('#','');
+    const matName='mat_'+hex;
+    if(!matNames.has(matName)){
+      matNames.add(matName);
+      const r=parseInt(hex.slice(0,2),16)/255,g=parseInt(hex.slice(2,4),16)/255,b=parseInt(hex.slice(4,6),16)/255;
+      mtl+=`newmtl ${matName}\nKd ${r.toFixed(4)} ${g.toFixed(4)} ${b.toFixed(4)}\nKa 0.0 0.0 0.0\nKs 0.0 0.0 0.0\nNs 0\nd 1\n\n`;
+    }
+    const geo=mesh.geometry.clone();geo.applyMatrix4(mesh.matrixWorld);
+    if(!geo.attributes.normal)geo.computeVertexNormals();
     const pos=geo.attributes.position,nor=geo.attributes.normal;
     const idx=geo.index?Array.from(geo.index.array):null;
     const vc=pos.count;
-    for(let i=0;i<vc;i++){v+=`v ${pos.getX(i).toFixed(5)} ${pos.getY(i).toFixed(5)} ${pos.getZ(i).toFixed(5)}\n`;}
-    if(nor){for(let i=0;i<vc;i++){n+=`vn ${nor.getX(i).toFixed(5)} ${nor.getY(i).toFixed(5)} ${nor.getZ(i).toFixed(5)}\n`;}}
-    if(idx){for(let i=0;i<idx.length;i+=3){const a=idx[i]+vi,b=idx[i+1]+vi,c=idx[i+2]+vi;f+=`f ${a}//${a} ${b}//${b} ${c}//${c}\n`;}}
-    else{for(let i=0;i<vc;i+=3){const a=i+vi,b=i+1+vi,c=i+2+vi;f+=`f ${a}//${a} ${b}//${b} ${c}//${c}\n`;}}
+    obj+=`g mesh${mi}\nusemtl ${matName}\n`;
+    for(let i=0;i<vc;i++)obj+=`v ${pos.getX(i).toFixed(5)} ${pos.getY(i).toFixed(5)} ${pos.getZ(i).toFixed(5)}\n`;
+    if(nor){for(let i=0;i<vc;i++)obj+=`vn ${nor.getX(i).toFixed(5)} ${nor.getY(i).toFixed(5)} ${nor.getZ(i).toFixed(5)}\n`;}
+    if(idx){for(let i=0;i<idx.length;i+=3){const a=idx[i]+vi,b=idx[i+1]+vi,c=idx[i+2]+vi;obj+=`f ${a}//${a} ${b}//${b} ${c}//${c}\n`;}}
+    else{for(let i=0;i<vc;i+=3){const a=i+vi,b=i+1+vi,c=i+2+vi;obj+=`f ${a}//${a} ${b}//${b} ${c}//${c}\n`;}}
     vi+=vc;geo.dispose();
   });
-  const txt=`# Exported by SVG→3D\n${v}${n}${f}`;
-  downloadBlob(new Blob([txt],{type:'text/plain'}),fname);
+  // Download both files
+  downloadBlob(new Blob([obj],{type:'text/plain'}),fname);
+  setTimeout(()=>downloadBlob(new Blob([mtl],{type:'text/plain'}),base+'.mtl'),300);
 }
 
-// STL binary export
+// STL binary export — vertex colors encoded in attribute byte (Materialise/VisCAM style)
 function exportSTL(fname){
   let triCount=0;
   root.children.forEach(mesh=>{
@@ -704,21 +841,26 @@ function exportSTL(fname){
   triCount=Math.round(triCount);
   const buf=new ArrayBuffer(84+triCount*50);
   const view=new DataView(buf);
-  // header 80 bytes, tri count
-  for(let i=0;i<80;i++)view.setUint8(i,0);
+  const enc=new TextEncoder();
+  const hdr=enc.encode('COLOR=');hdr.forEach((b,i)=>view.setUint8(i,b));
   view.setUint32(80,triCount,true);
   let off=84;
   root.children.forEach(mesh=>{
     if(!mesh.isMesh)return;
-    const geo=mesh.geometry.clone();
-    geo.applyMatrix4(mesh.matrixWorld);
+    const hex=(mesh.userData.faceColor||'#888888').replace('#','');
+    const cr=parseInt(hex.slice(0,2),16)>>3;
+    const cg=parseInt(hex.slice(2,4),16)>>3;
+    const cb=parseInt(hex.slice(4,6),16)>>3;
+    // VisCAM color: bit15=1, R5G5B5
+    const colorAttr=(1<<15)|(cr<<10)|(cg<<5)|cb;
+
+    const geo=mesh.geometry.clone();geo.applyMatrix4(mesh.matrixWorld);
     if(!geo.attributes.normal)geo.computeVertexNormals();
     const pos=geo.attributes.position,nor=geo.attributes.normal;
     const idx=geo.index?Array.from(geo.index.array):null;
     const fc=idx?idx.length/3:pos.count/3;
     for(let i=0;i<fc;i++){
       const ia=idx?idx[i*3]:i*3,ib=idx?idx[i*3+1]:i*3+1,ic=idx?idx[i*3+2]:i*3+2;
-      // normal (average)
       view.setFloat32(off,(nor.getX(ia)+nor.getX(ib)+nor.getX(ic))/3,true);off+=4;
       view.setFloat32(off,(nor.getY(ia)+nor.getY(ib)+nor.getY(ic))/3,true);off+=4;
       view.setFloat32(off,(nor.getZ(ia)+nor.getZ(ib)+nor.getZ(ic))/3,true);off+=4;
@@ -727,29 +869,30 @@ function exportSTL(fname){
         view.setFloat32(off,pos.getY(iv),true);off+=4;
         view.setFloat32(off,pos.getZ(iv),true);off+=4;
       });
-      view.setUint16(off,0,true);off+=2;
+      view.setUint16(off,colorAttr,true);off+=2;
     }
     geo.dispose();
   });
   downloadBlob(new Blob([buf],{type:'application/octet-stream'}),fname);
 }
 
-// PLY ASCII export
+// PLY ASCII export with per-vertex RGB color
 function exportPLY(fname){
   const verts=[],faces=[];let vi=0;
   root.children.forEach(mesh=>{
     if(!mesh.isMesh)return;
-    const geo=mesh.geometry.clone();
-    geo.applyMatrix4(mesh.matrixWorld);
+    const hex=(mesh.userData.faceColor||'#888888').replace('#','');
+    const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16);
+    const geo=mesh.geometry.clone();geo.applyMatrix4(mesh.matrixWorld);
     const pos=geo.attributes.position;
     const idx=geo.index?Array.from(geo.index.array):null;
     const vc=pos.count;
-    for(let i=0;i<vc;i++)verts.push(`${pos.getX(i).toFixed(5)} ${pos.getY(i).toFixed(5)} ${pos.getZ(i).toFixed(5)}`);
+    for(let i=0;i<vc;i++)verts.push(`${pos.getX(i).toFixed(5)} ${pos.getY(i).toFixed(5)} ${pos.getZ(i).toFixed(5)} ${r} ${g} ${b}`);
     if(idx){for(let i=0;i<idx.length;i+=3)faces.push(`3 ${idx[i]+vi} ${idx[i+1]+vi} ${idx[i+2]+vi}`);}
     else{for(let i=0;i<vc;i+=3)faces.push(`3 ${i+vi} ${i+1+vi} ${i+2+vi}`);}
     vi+=vc;geo.dispose();
   });
-  const hdr=`ply\nformat ascii 1.0\nelement vertex ${verts.length}\nproperty float x\nproperty float y\nproperty float z\nelement face ${faces.length}\nproperty list uchar int vertex_indices\nend_header\n`;
+  const hdr=`ply\nformat ascii 1.0\nelement vertex ${verts.length}\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nelement face ${faces.length}\nproperty list uchar int vertex_indices\nend_header\n`;
   downloadBlob(new Blob([hdr+verts.join('\n')+'\n'+faces.join('\n')],{type:'text/plain'}),fname);
 }
 
@@ -911,30 +1054,24 @@ Connections:  {
   downloadBlob(new Blob([fbx],{type:'text/plain'}),fname);
 }
 
-// GLTF/GLB — manual minimal implementation
+// GLTF/GLB with per-mesh PBR material colors
 function exportGLTF(fmt,fname){
-  const meshes=[];
+  const meshInfos=[];
   root.children.forEach(mesh=>{
     if(!mesh.isMesh)return;
     const geo=mesh.geometry.clone();
     geo.applyMatrix4(mesh.matrixWorld);
     if(!geo.index)geo.setIndex(Array.from({length:geo.attributes.position.count},(v,i)=>i));
     if(!geo.attributes.normal)geo.computeVertexNormals();
-    meshes.push(geo);
+    const hex=(mesh.userData.faceColor||'#888888').replace('#','');
+    const r=parseInt(hex.slice(0,2),16)/255,g=parseInt(hex.slice(2,4),16)/255,b=parseInt(hex.slice(4,6),16)/255;
+    meshInfos.push({geo,color:[r,g,b,1]});
   });
-  if(!meshes.length){alert('Nothing to export.');return;}
-
-  const buffers=[];
-  const accessors=[];
-  const meshDefs=[];
-  const primitives=[];
-  let bOffset=0;
-
-  meshes.forEach((geo,mi)=>{
+  if(!meshInfos.length){alert('Nothing to export.');return;}
+  const buffers=[],accessors=[],primitives=[],materials=[];
+  meshInfos.forEach(({geo,color},mi)=>{
     const pos=geo.attributes.position,nor=geo.attributes.normal,idx=geo.index;
     const vCount=pos.count,iCount=idx.array.length;
-
-    // position buffer
     const posBuf=new Float32Array(vCount*3);
     let mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity];
     for(let i=0;i<vCount;i++){
@@ -942,59 +1079,46 @@ function exportGLTF(fmt,fname){
       mn[0]=Math.min(mn[0],posBuf[i*3]);mn[1]=Math.min(mn[1],posBuf[i*3+1]);mn[2]=Math.min(mn[2],posBuf[i*3+2]);
       mx[0]=Math.max(mx[0],posBuf[i*3]);mx[1]=Math.max(mx[1],posBuf[i*3+1]);mx[2]=Math.max(mx[2],posBuf[i*3+2]);
     }
-    // normal buffer
     const norBuf=new Float32Array(vCount*3);
     for(let i=0;i<vCount;i++){norBuf[i*3]=nor.getX(i);norBuf[i*3+1]=nor.getY(i);norBuf[i*3+2]=nor.getZ(i);}
-    // index buffer (uint32)
     const idxBuf=new Uint32Array(idx.array);
-
     buffers.push(posBuf.buffer,norBuf.buffer,idxBuf.buffer);
-    const posAcc={bufferView:buffers.length-3,byteOffset:0,componentType:5126,count:vCount,type:'VEC3',min:mn,max:mx};
-    const norAcc={bufferView:buffers.length-2,byteOffset:0,componentType:5126,count:vCount,type:'VEC3'};
-    const idxAcc={bufferView:buffers.length-1,byteOffset:0,componentType:5125,count:iCount,type:'SCALAR'};
     const ai=accessors.length;
-    accessors.push(posAcc,norAcc,idxAcc);
-    primitives.push({attributes:{POSITION:ai,NORMAL:ai+1},indices:ai+2});
+    accessors.push(
+      {bufferView:buffers.length-3,byteOffset:0,componentType:5126,count:vCount,type:'VEC3',min:mn,max:mx},
+      {bufferView:buffers.length-2,byteOffset:0,componentType:5126,count:vCount,type:'VEC3'},
+      {bufferView:buffers.length-1,byteOffset:0,componentType:5125,count:iCount,type:'SCALAR'}
+    );
+    materials.push({name:'mat_'+mi,pbrMetallicRoughness:{baseColorFactor:color,metallicFactor:0,roughnessFactor:1},doubleSided:true});
+    primitives.push({attributes:{POSITION:ai,NORMAL:ai+1},indices:ai+2,material:mi});
     geo.dispose();
   });
-
+  const nodes=primitives.map((_,i)=>({mesh:i}));
+  const meshDefs=primitives.map((prim,i)=>({name:'mesh_'+i,primitives:[prim]}));
   if(fmt==='gltf'){
-    // Text GLTF with base64 buffers
     const bvs=[],allBufs=[];
-    let off=0;
     buffers.forEach(b=>{
       const ba=new Uint8Array(b);
       const b64=btoa(String.fromCharCode(...ba));
       allBufs.push({uri:'data:application/octet-stream;base64,'+b64,byteLength:b.byteLength});
       bvs.push({buffer:allBufs.length-1,byteOffset:0,byteLength:b.byteLength});
-      off+=b.byteLength;
     });
-    const gltf={asset:{version:'2.0',generator:'SVG→3D'},scene:0,scenes:[{nodes:[0]}],nodes:[{mesh:0}],meshes:[{name:'Logo',primitives}],accessors,bufferViews:bvs,buffers:allBufs};
+    const gltf={asset:{version:'2.0',generator:'SVG->3D'},scene:0,scenes:[{nodes:nodes.map((_,i)=>i)}],nodes,meshes:meshDefs,accessors,bufferViews:bvs,buffers:allBufs,materials};
     downloadBlob(new Blob([JSON.stringify(gltf,null,2)],{type:'model/gltf+json'}),fname);
   } else {
-    // Binary GLB
-    const jsonStr=JSON.stringify({asset:{version:'2.0',generator:'SVG→3D'},scene:0,scenes:[{nodes:[0]}],nodes:[{mesh:0}],meshes:[{name:'Logo',primitives}],accessors,bufferViews:[],buffers:[]});
-    // Build combined binary buffer
     const parts=buffers.map(b=>new Uint8Array(b));
     const totalBin=parts.reduce((s,p)=>s+Math.ceil(p.byteLength/4)*4,0);
     const binBuf=new Uint8Array(totalBin);
-    let bOff2=0;
-    const bvs=[];
-    parts.forEach((p,pi)=>{
-      bvs.push({buffer:0,byteOffset:bOff2,byteLength:p.byteLength});
-      binBuf.set(p,bOff2);bOff2+=Math.ceil(p.byteLength/4)*4;
-    });
-    const finalJson=JSON.stringify({asset:{version:'2.0',generator:'SVG→3D'},scene:0,scenes:[{nodes:[0]}],nodes:[{mesh:0}],meshes:[{name:'Logo',primitives}],accessors,bufferViews:bvs,buffers:[{byteLength:totalBin}]});
+    let bOff=0;const bvs=[];
+    parts.forEach(p=>{bvs.push({buffer:0,byteOffset:bOff,byteLength:p.byteLength});binBuf.set(p,bOff);bOff+=Math.ceil(p.byteLength/4)*4;});
+    const finalJson=JSON.stringify({asset:{version:'2.0',generator:'SVG->3D'},scene:0,scenes:[{nodes:nodes.map((_,i)=>i)}],nodes,meshes:meshDefs,accessors,bufferViews:bvs,buffers:[{byteLength:totalBin}],materials});
     const jsonBytes=new TextEncoder().encode(finalJson);
     const jsonPadded=Math.ceil(jsonBytes.length/4)*4;
     const total=12+8+jsonPadded+8+totalBin;
     const out=new ArrayBuffer(total);const dv=new DataView(out);
-    // GLB header
     dv.setUint32(0,0x46546C67,true);dv.setUint32(4,2,true);dv.setUint32(8,total,true);
-    // JSON chunk
     dv.setUint32(12,jsonPadded,true);dv.setUint32(16,0x4E4F534A,true);
     const jArr=new Uint8Array(out,20,jsonPadded);jArr.fill(0x20);jArr.set(jsonBytes);
-    // BIN chunk
     const binOff=20+jsonPadded;
     dv.setUint32(binOff,totalBin,true);dv.setUint32(binOff+4,0x004E4942,true);
     new Uint8Array(out,binOff+8).set(binBuf);
@@ -1007,19 +1131,7 @@ function makeCompound(els){
   const contours=[];
   els.forEach(el=>{sampleEl(el).forEach(pts=>{if(pts.length<3)return;const a=signedArea(pts),bb=getBB(pts);contours.push({pts,a,bb,abs:Math.abs(a)});});});
   if(!contours.length)return[];
-  contours.sort((a,b)=>b.abs-a.abs);
-  const result=[],used=new Set();
-  for(let i=0;i<contours.length;i++){
-    if(used.has(i))continue;used.add(i);
-    const outer=contours[i];
-    const shape=new THREE.Shape();trPts(shape,outer.pts);
-    for(let j=i+1;j<contours.length;j++){
-      if(used.has(j))continue;const inn=contours[j];
-      if(inn.abs<outer.abs*.95&&bbInside(outer.bb,inn.bb)){const hole=new THREE.Path();trPts(hole,inn.pts);shape.holes.push(hole);used.add(j);}
-    }
-    result.push(shape);
-  }
-  return result;
+  return buildCompoundFromContours(contours);
 }
 function trPts(s,pts){s.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)s.lineTo(pts[i].x,pts[i].y);s.closePath();}
 function signedArea(p){let a=0,n=p.length;for(let i=0;i<n;i++){const j=(i+1)%n;a+=p[i].x*p[j].y-p[j].x*p[i].y;}return a/2;}
@@ -1082,6 +1194,7 @@ function resetView(){
   camera.position.set(0,0,360);
   if(root){root.rotation.set(0,0,0);root.position.set(0,0,0);}
   if(edgeRoot){edgeRoot.rotation.set(0,0,0);edgeRoot.position.set(0,0,0);}
+  if(debugRoot){debugRoot.rotation.set(0,0,0);debugRoot.position.set(0,0,0);}
 }
 
 function loadDemo(){
