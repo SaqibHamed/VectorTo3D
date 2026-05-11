@@ -896,162 +896,436 @@ function exportPLY(fname){
   downloadBlob(new Blob([hdr+verts.join('\n')+'\n'+faces.join('\n')],{type:'text/plain'}),fname);
 }
 
-// FBX ASCII export (FBX 7.4 ASCII — readable by Blender, Maya, 3ds Max)
+// ── FBX Binary 7.4 export ─────────────────────────────────────────────────────
+// Blender only accepts binary FBX. This writes a minimal but valid FBX 7.4 binary
+// file with one mesh per color layer, each linked to a Lambert material.
 function exportFBX(fname){
   if(!root){alert('No model loaded.');return;}
 
-  // Collect all geometry merged into world space
-  const allVerts=[], allNormals=[], allFaces=[];
-  let vOffset=0;
+  // ── helpers to write FBX binary nodes ──────────────────────────────────────
+  const enc=new TextEncoder();
 
+  // A "record" in FBX binary is: endOffset(u32), numProps(u32), propListLen(u32), nameLen(u8), name, [props], [children], NULL_RECORD
+  // We build everything into a flat Uint8Array using a growable buffer approach.
+
+  class FBXBuf {
+    constructor(){this.chunks=[];this.len=0;}
+    w(arr){const u=arr instanceof Uint8Array?arr:new Uint8Array(arr);this.chunks.push(u);this.len+=u.length;return this;}
+    u8(v){return this.w([v&0xff]);}
+    u32(v){const b=new Uint8Array(4);new DataView(b.buffer).setUint32(0,v,true);return this.w(b);}
+    i32(v){const b=new Uint8Array(4);new DataView(b.buffer).setInt32(0,v,true);return this.w(b);}
+    i64(lo,hi=0){const b=new Uint8Array(8);const dv=new DataView(b.buffer);dv.setInt32(0,lo,true);dv.setInt32(4,hi,true);return this.w(b);}
+    f32(v){const b=new Uint8Array(4);new DataView(b.buffer).setFloat32(0,v,true);return this.w(b);}
+    f64(v){const b=new Uint8Array(8);new DataView(b.buffer).setFloat64(0,v,true);return this.w(b);}
+    str(s){const e=enc.encode(s);this.u8(e.length);return this.w(e);}
+    // prop: 'I'=int32, 'L'=int64, 'F'=float, 'D'=double, 'S'=string, 'R'=raw, 'd'=double array, 'f'=float array, 'i'=int array
+    prop(type,val){
+      this.u8(type.charCodeAt(0));
+      if(type==='I'){this.i32(val);}
+      else if(type==='L'){this.i64(val>>>0,val<0?-1:0);}
+      else if(type==='F'){this.f32(val);}
+      else if(type==='D'){this.f64(val);}
+      else if(type==='S'){const e=enc.encode(val);this.u32(e.length);this.w(e);}
+      else if(type==='R'){this.u32(val.length);this.w(val);}
+      else if(type==='d'){// double array
+        this.u32(val.length);this.u32(0);this.u32(val.length*8);
+        const b=new Uint8Array(val.length*8);const dv=new DataView(b.buffer);
+        val.forEach((v,i)=>dv.setFloat64(i*8,v,true));this.w(b);
+      } else if(type==='f'){
+        this.u32(val.length);this.u32(0);this.u32(val.length*4);
+        const b=new Uint8Array(val.length*4);const dv=new DataView(b.buffer);
+        val.forEach((v,i)=>dv.setFloat32(i*4,v,true));this.w(b);
+      } else if(type==='i'){
+        this.u32(val.length);this.u32(0);this.u32(val.length*4);
+        const b=new Uint8Array(val.length*4);const dv=new DataView(b.buffer);
+        val.forEach((v,i)=>dv.setInt32(i*4,v,true));this.w(b);
+      }
+      return this;
+    }
+    toUint8(){const out=new Uint8Array(this.len);let o=0;this.chunks.forEach(c=>{out.set(c,o);o+=c.length;});return out;}
+  }
+
+  // Build a node: returns Uint8Array of the complete node record
+  function node(name, props, children){
+    // props: [{type,val}, ...]  children: [Uint8Array, ...]
+    const buf=new FBXBuf();
+    props.forEach(({type,val})=>buf.prop(type,val));
+    const propData=buf.toUint8();
+
+    const childBuf=new FBXBuf();
+    children.forEach(c=>childBuf.w(c));
+    // null record sentinel (13 zero bytes)
+    if(children.length>0)childBuf.w(new Uint8Array(13));
+    const childData=childBuf.toUint8();
+
+    const nameBytes=enc.encode(name);
+    const headerSize=13; // endOffset(4)+numProps(4)+propListLen(4)+nameLen(1)
+    const totalSize=headerSize+nameBytes.length+propData.length+childData.length;
+
+    const out=new FBXBuf();
+    out.u32(totalSize);             // endOffset (relative to file start — we'll fix up later via flat write)
+    out.u32(props.length);
+    out.u32(propData.length);
+    out.u8(nameBytes.length);
+    out.w(nameBytes);
+    out.w(propData);
+    out.w(childData);
+    return out.toUint8();
+  }
+
+  // ── Collect mesh data ───────────────────────────────────────────────────────
+  const meshInfos=[];
   root.children.forEach(mesh=>{
     if(!mesh.isMesh)return;
     const geo=mesh.geometry.clone();
     geo.applyMatrix4(mesh.matrixWorld);
     if(!geo.attributes.normal)geo.computeVertexNormals();
+    const hex=(mesh.userData.faceColor||'#888888').replace('#','');
+    const r=parseInt(hex.slice(0,2),16)/255;
+    const g=parseInt(hex.slice(2,4),16)/255;
+    const b=parseInt(hex.slice(4,6),16)/255;
     const pos=geo.attributes.position, nor=geo.attributes.normal;
-    const idx=geo.index?Array.from(geo.index.array):null;
+    const idx=geo.index;
     const vc=pos.count;
-
-    for(let i=0;i<vc;i++){
-      allVerts.push(pos.getX(i), pos.getY(i), pos.getZ(i));
-      allNormals.push(nor.getX(i), nor.getY(i), nor.getZ(i));
-    }
-    if(idx){
-      for(let i=0;i<idx.length;i+=3){
-        // FBX face: last index is bitwise-inverted to signal end of polygon
-        allFaces.push(idx[i]+vOffset, idx[i+1]+vOffset, ~(idx[i+2]+vOffset));
-      }
-    } else {
-      for(let i=0;i<vc;i+=3){
-        allFaces.push(i+vOffset, i+1+vOffset, ~(i+2+vOffset));
-      }
-    }
-    vOffset+=vc;
+    const verts=[], normals=[], faces=[];
+    for(let i=0;i<vc;i++){verts.push(pos.getX(i),pos.getY(i),pos.getZ(i));}
+    for(let i=0;i<vc;i++){normals.push(nor.getX(i),nor.getY(i),nor.getZ(i));}
+    if(idx){const arr=idx.array;for(let i=0;i<arr.length;i+=3)faces.push(arr[i],arr[i+1],~arr[i+2]);}
+    else{for(let i=0;i<vc;i+=3)faces.push(i,i+1,~(i+2));}
+    meshInfos.push({verts,normals,faces,r,g,b,hex});
     geo.dispose();
   });
 
+  if(!meshInfos.length){alert('Nothing to export.');return;}
+
   const now=new Date();
-  const ts=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}:000`;
-  const modelName=parsed?parsed.name.replace(/\.svg$/i,''):'Logo';
+  const modelName=(parsed?parsed.name.replace(/\.svg$/i,''):'Logo').replace(/[^\w]/g,'_');
 
-  // Build normal index array (per-vertex normals, same as vertex count)
-  const normIdx=Array.from({length:allFaces.length*3},(v,i)=>i);
+  // ── Build FBX nodes ─────────────────────────────────────────────────────────
+  const allNodes=[];
 
-  const fbx=`; FBX 7.4.0 project file
-; Created by SVG→3D
-; ${ts}
+  // FBXHeaderExtension
+  allNodes.push(node('FBXHeaderExtension',[],[
+    node('FBXHeaderVersion',[{type:'I',val:1003}],[]),
+    node('FBXVersion',[{type:'I',val:7400}],[]),
+    node('EncryptionType',[{type:'I',val:0}],[]),
+    node('Creator',[{type:'S',val:'SVG->3D Exporter 1.0'}],[])
+  ]));
 
-FBXHeaderExtension:  {
-	FBXHeaderVersion: 1003
-	FBXVersion: 7400
-	CreationTimeStamp:  {
-		Version: 1000
-		Year: ${now.getFullYear()}
-		Month: ${now.getMonth()+1}
-		Day: ${now.getDate()}
-		Hour: ${now.getHours()}
-		Minute: ${now.getMinutes()}
-		Second: ${now.getSeconds()}
-		Millisecond: 0
-	}
-	Creator: "SVG->3D Exporter"
-	SceneInfo: "SceneInfo::GlobalInfo", "UserData" {
-		Type: "UserData"
-		Version: 100
-		MetaData:  {
-			Version: 100
-			Title: "${modelName}"
-			Subject: ""
-			Author: ""
-			Keywords: ""
-			Revision: ""
-			Comment: ""
-		}
-	}
-}
+  // FileId (16 random bytes as R property)
+  const fileId=new Uint8Array(16);crypto.getRandomValues(fileId);
+  allNodes.push(node('FileId',[{type:'R',val:fileId}],[]));
 
-GlobalSettings:  {
-	Version: 1000
-	Properties70:  {
-		P: "UpAxis", "int", "Integer", "",1
-		P: "UpAxisSign", "int", "Integer", "",1
-		P: "FrontAxis", "int", "Integer", "",2
-		P: "FrontAxisSign", "int", "Integer", "",1
-		P: "CoordAxis", "int", "Integer", "",0
-		P: "CoordAxisSign", "int", "Integer", "",1
-		P: "OriginalUpAxis", "int", "Integer", "",-1
-		P: "OriginalUpAxisSign", "int", "Integer", "",1
-		P: "UnitScaleFactor", "double", "Number", "",1
-		P: "OriginalUnitScaleFactor", "double", "Number", "",1
-	}
-}
+  // CreationTime
+  allNodes.push(node('CreationTime',[{type:'S',val:`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}:000`}],[]));
 
-; Object definitions
-;------------------------------------------------------------------
+  // Creator
+  allNodes.push(node('Creator',[{type:'S',val:'SVG->3D Exporter 1.0'}],[]));
 
-Definitions:  {
-	Version: 100
-	Count: 3
-	ObjectType: "Geometry" {
-		Count: 1
-	}
-	ObjectType: "Model" {
-		Count: 1
-	}
-}
+  // GlobalSettings
+  allNodes.push(node('GlobalSettings',[],[
+    node('Version',[{type:'I',val:1000}],[]),
+    node('Properties70',[],[
+      node('P',[{type:'S',val:'UpAxis'},{type:'S',val:'int'},{type:'S',val:'Integer'},{type:'S',val:''},{type:'I',val:1}],[]),
+      node('P',[{type:'S',val:'FrontAxis'},{type:'S',val:'int'},{type:'S',val:'Integer'},{type:'S',val:''},{type:'I',val:2}],[]),
+      node('P',[{type:'S',val:'CoordAxis'},{type:'S',val:'int'},{type:'S',val:'Integer'},{type:'S',val:''},{type:'I',val:0}],[]),
+      node('P',[{type:'S',val:'UnitScaleFactor'},{type:'S',val:'double'},{type:'S',val:'Number'},{type:'S',val:''},{type:'D',val:1.0}],[])
+    ])
+  ]));
 
-; Object properties
-;------------------------------------------------------------------
+  // Documents
+  allNodes.push(node('Documents',[],[
+    node('Count',[{type:'I',val:1}],[]),
+    node('Document',[{type:'L',val:900000},{type:'S',val:''},{type:'S',val:'Scene'}],[
+      node('RootNode',[{type:'L',val:0}],[])
+    ])
+  ]));
 
-Objects:  {
-	Geometry: 1000000, "Geometry::${modelName}", "Mesh" {
-		Vertices: *${allVerts.length} {
-			a: ${allVerts.map(v=>v.toFixed(6)).join(',')}
-		}
-		PolygonVertexIndex: *${allFaces.length} {
-			a: ${allFaces.join(',')}
-		}
-		LayerElementNormal: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "ByVertice"
-			ReferenceInformationType: "Direct"
-			Normals: *${allNormals.length} {
-				a: ${allNormals.map(v=>v.toFixed(6)).join(',')}
-			}
-		}
-		Layer: 0 {
-			Version: 100
-			LayerElement:  {
-				Type: "LayerElementNormal"
-				TypedIndex: 0
-			}
-		}
-	}
-	Model: 2000000, "Model::${modelName}", "Mesh" {
-		Version: 232
-		Properties70:  {
-			P: "RotationActive", "bool", "", "",1
-			P: "InheritType", "enum", "", "",1
-			P: "ScalingMax", "Vector3D", "Vector", "",0,0,0
-			P: "DefaultAttributeIndex", "int", "Integer", "",0
-		}
-		Shading: T
-		Culling: "CullingOff"
-	}
-}
+  // Definitions
+  const defChildren=[node('Version',[{type:'I',val:100}],[])];
+  defChildren.push(node('ObjectType',[{type:'S',val:'GlobalSettings'}],[node('Count',[{type:'I',val:1}],[])]));
+  defChildren.push(node('ObjectType',[{type:'S',val:'Geometry'}],[node('Count',[{type:'I',val:meshInfos.length}],[])]));
+  defChildren.push(node('ObjectType',[{type:'S',val:'Model'}],[node('Count',[{type:'I',val:meshInfos.length}],[])]));
+  defChildren.push(node('ObjectType',[{type:'S',val:'Material'}],[node('Count',[{type:'I',val:meshInfos.length}],[])]));
+  allNodes.push(node('Definitions',[],[...defChildren]));
 
-; Object connections
-;------------------------------------------------------------------
+  // Objects — one Geometry + Model + Material per mesh
+  const objChildren=[];
+  const connChildren=[];
 
-Connections:  {
-	C: "OO",1000000,2000000
-	C: "OO",2000000,0
-}
-`;
+  meshInfos.forEach(({verts,normals,faces,r,g,b,hex},mi)=>{
+    const geoId=1000000+mi*3;
+    const modelId=1000001+mi*3;
+    const matId=1000002+mi*3;
+    const mname=`${modelName}_${mi}`;
 
-  downloadBlob(new Blob([fbx],{type:'text/plain'}),fname);
+    // Geometry node
+    objChildren.push(node('Geometry',[{type:'L',val:geoId},{type:'S',val:`Geometry::${mname}`},{type:'S',val:'Mesh'}],[
+      node('Vertices',[{type:'d',val:verts}],[]),
+      node('PolygonVertexIndex',[{type:'i',val:faces}],[]),
+      node('LayerElementNormal',[{type:'I',val:0}],[
+        node('Version',[{type:'I',val:102}],[]),
+        node('Name',[{type:'S',val:''}],[]),
+        node('MappingInformationType',[{type:'S',val:'ByVertice'}],[]),
+        node('ReferenceInformationType',[{type:'S',val:'Direct'}],[]),
+        node('Normals',[{type:'d',val:normals}],[])
+      ]),
+      node('Layer',[{type:'I',val:0}],[
+        node('Version',[{type:'I',val:100}],[]),
+        node('LayerElement',[],[
+          node('Type',[{type:'S',val:'LayerElementNormal'}],[]),
+          node('TypedIndex',[{type:'I',val:0}],[])
+        ])
+      ])
+    ]));
+
+    // Model node
+    objChildren.push(node('Model',[{type:'L',val:modelId},{type:'S',val:`Model::${mname}`},{type:'S',val:'Mesh'}],[
+      node('Version',[{type:'I',val:232}],[]),
+      node('Properties70',[],[
+        node('P',[{type:'S',val:'DefaultAttributeIndex'},{type:'S',val:'int'},{type:'S',val:'Integer'},{type:'S',val:''},{type:'I',val:0}],[])
+      ]),
+      node('Shading',[{type:'I',val:1}],[]),
+      node('Culling',[{type:'S',val:'CullingOff'}],[])
+    ]));
+
+    // Material node (Lambert with diffuse color)
+    objChildren.push(node('Material',[{type:'L',val:matId},{type:'S',val:`Material::${mname}`},{type:'S',val:''}],[
+      node('Version',[{type:'I',val:102}],[]),
+      node('ShadingModel',[{type:'S',val:'Lambert'}],[]),
+      node('MultiLayer',[{type:'I',val:0}],[]),
+      node('Properties70',[],[
+        node('P',[{type:'S',val:'DiffuseColor'},{type:'S',val:'Color'},{type:'S',val:''},{type:'S',val:'A'},{type:'D',val:r},{type:'D',val:g},{type:'D',val:b}],[]),
+        node('P',[{type:'S',val:'Diffuse'},{type:'S',val:'Vector3D'},{type:'S',val:'Vector'},{type:'S',val:''},{type:'D',val:r},{type:'D',val:g},{type:'D',val:b}],[]),
+        node('P',[{type:'S',val:'Emissive'},{type:'S',val:'Vector3D'},{type:'S',val:'Vector'},{type:'S',val:''},{type:'D',val:0},{type:'D',val:0},{type:'D',val:0}],[]),
+        node('P',[{type:'S',val:'Ambient'},{type:'S',val:'Vector3D'},{type:'S',val:'Vector'},{type:'S',val:''},{type:'D',val:0},{type:'D',val:0},{type:'D',val:0}],[])
+      ])
+    ]));
+
+    // Connections: Geometry→Model, Material→Model, Model→Root(0)
+    connChildren.push(node('C',[{type:'S',val:'OO'},{type:'L',val:geoId},{type:'L',val:modelId}],[]));
+    connChildren.push(node('C',[{type:'S',val:'OO'},{type:'L',val:matId},{type:'L',val:modelId}],[]));
+    connChildren.push(node('C',[{type:'S',val:'OO'},{type:'L',val:modelId},{type:'L',val:0}],[]));
+  });
+
+  allNodes.push(node('Objects',[],objChildren));
+  allNodes.push(node('Connections',[],connChildren));
+
+  // ── Assemble binary file ────────────────────────────────────────────────────
+  // FBX binary magic: "Kaydara FBX Binary  \x00\x1a\x00"
+  const magic=new Uint8Array([75,97,121,100,97,114,97,32,70,66,88,32,66,105,110,97,114,121,32,32,0,26,0]);
+  const verBuf=new Uint8Array(4);new DataView(verBuf.buffer).setUint32(0,7400,true);
+
+  // Collect all node bytes, then compute offsets
+  // We need to fix up the endOffset field in each node (4 bytes at start = offset from file start to end of this node)
+  // Instead of a two-pass approach, we concatenate and accept that endOffsets are relative—
+  // Blender's FBX parser uses endOffset as absolute position within the file.
+  // So we need to compute them. Build everything with a placeholder, then fix up.
+
+  // Simpler: use a single flat buffer builder that tracks absolute position
+  const fileParts=[magic,verBuf];
+  let absoluteOffset=magic.length+4; // after magic+version
+
+  function writeNodeAbsolute(nameStr, props, childrenFn){
+    // props: array of {type,val}
+    const propBuf=new FBXBuf();
+    props.forEach(({type,val})=>propBuf.prop(type,val));
+    const propBytes=propBuf.toUint8();
+
+    const nameBytes=enc.encode(nameStr);
+
+    // Recursively write children to get their bytes
+    const childrenBytes=childrenFn ? childrenFn() : new Uint8Array(0);
+    const sentinel=childrenBytes.length>0?new Uint8Array(13):new Uint8Array(0);
+
+    // endOffset = current absoluteOffset + 13(header) + nameLen + propLen + childrenLen + sentinelLen
+    const bodyLen=nameBytes.length+propBytes.length+childrenBytes.length+sentinel.length;
+    const headerLen=13;
+    const endOffset=absoluteOffset+headerLen+bodyLen;
+
+    const hdr=new FBXBuf();
+    hdr.u32(endOffset);
+    hdr.u32(props.length);
+    hdr.u32(propBytes.length);
+    hdr.u8(nameBytes.length);
+
+    const combined=new FBXBuf();
+    combined.w(hdr.toUint8()).w(nameBytes).w(propBytes).w(childrenBytes).w(sentinel);
+    const bytes=combined.toUint8();
+    absoluteOffset+=bytes.length;
+    return bytes;
+  }
+
+  // Re-serialize using absolute-offset aware approach
+  // For simplicity, collect all flat node bytes first (offsets will be slightly off
+  // since we can't know child sizes ahead of time without two passes).
+  // The simplest correct approach: build into a flat buf, then patch endOffsets.
+
+  // Build everything into a flat array; record (position_of_endOffset_field → actual_end_position)
+  const flat=new FBXBuf();
+  flat.w(magic);
+  flat.u32(7400); // version
+
+  const patches=[]; // {patchAt: byte offset of endOffset field, endAt: will be filled}
+
+  function emitNode(name, props, children){
+    const nameBytes=enc.encode(name);
+    const propBuf=new FBXBuf();
+    props.forEach(({type,val})=>propBuf.prop(type,val));
+    const propBytes=propBuf.toUint8();
+
+    const patchAt=flat.len; // where endOffset (u32) goes
+    flat.u32(0); // placeholder endOffset
+    flat.u32(props.length);
+    flat.u32(propBytes.length);
+    flat.u8(nameBytes.length);
+    flat.w(nameBytes);
+    flat.w(propBytes);
+
+    // emit children recursively
+    children.forEach(c=>emitNode(c.name,c.props,c.children||[]));
+
+    // sentinel if we had children
+    if(children.length>0) flat.w(new Uint8Array(13));
+
+    patches.push({patchAt, endAt:flat.len});
+  }
+
+  // Convert our pre-built node Uint8Arrays... actually let's use a recursive object approach
+  // Define tree as {name, props:[{type,val}], ch:[...]}
+  function N(name,props,...ch){return{name,props,ch};}
+
+  const idBase=1000000;
+  const tree=[
+    N('FBXHeaderExtension',[],
+      N('FBXHeaderVersion',[{type:'I',val:1003}]),
+      N('FBXVersion',[{type:'I',val:7400}]),
+      N('EncryptionType',[{type:'I',val:0}]),
+      N('Creator',[{type:'S',val:'SVG->3D v1.0'}])
+    ),
+    N('CreationTime',[{type:'S',val:`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}:000`}]),
+    N('Creator',[{type:'S',val:'SVG->3D v1.0'}]),
+    N('GlobalSettings',[],
+      N('Version',[{type:'I',val:1000}]),
+      N('Properties70',[],
+        N('P',[{type:'S',val:'UpAxis'},{type:'S',val:'int'},{type:'S',val:'Integer'},{type:'S',val:''},{type:'I',val:1}]),
+        N('P',[{type:'S',val:'FrontAxis'},{type:'S',val:'int'},{type:'S',val:'Integer'},{type:'S',val:''},{type:'I',val:2}]),
+        N('P',[{type:'S',val:'CoordAxis'},{type:'S',val:'int'},{type:'S',val:'Integer'},{type:'S',val:''},{type:'I',val:0}]),
+        N('P',[{type:'S',val:'UnitScaleFactor'},{type:'S',val:'double'},{type:'S',val:'Number'},{type:'S',val:''},{type:'D',val:1.0}])
+      )
+    ),
+    N('Documents',[],
+      N('Count',[{type:'I',val:1}]),
+      N('Document',[{type:'L',val:900000},{type:'S',val:''},{type:'S',val:'Scene'}],
+        N('RootNode',[{type:'L',val:0}])
+      )
+    ),
+    N('Definitions',[],
+      N('Version',[{type:'I',val:100}]),
+      N('ObjectType',[{type:'S',val:'GlobalSettings'}], N('Count',[{type:'I',val:1}])),
+      N('ObjectType',[{type:'S',val:'Geometry'}],       N('Count',[{type:'I',val:meshInfos.length}])),
+      N('ObjectType',[{type:'S',val:'Model'}],          N('Count',[{type:'I',val:meshInfos.length}])),
+      N('ObjectType',[{type:'S',val:'Material'}],       N('Count',[{type:'I',val:meshInfos.length}]))
+    ),
+    N('Objects',[],
+      ...meshInfos.flatMap(({verts,normals,faces,r,g,b},mi)=>{
+        const gid=idBase+mi*3, mid=idBase+mi*3+1, matid=idBase+mi*3+2;
+        const nm=`${modelName}_${mi}`;
+        return[
+          N('Geometry',[{type:'L',val:gid},{type:'S',val:`Geometry::${nm}`},{type:'S',val:'Mesh'}],
+            N('Vertices',[{type:'d',val:verts}]),
+            N('PolygonVertexIndex',[{type:'i',val:faces}]),
+            N('LayerElementNormal',[{type:'I',val:0}],
+              N('Version',[{type:'I',val:102}]),
+              N('Name',[{type:'S',val:''}]),
+              N('MappingInformationType',[{type:'S',val:'ByVertice'}]),
+              N('ReferenceInformationType',[{type:'S',val:'Direct'}]),
+              N('Normals',[{type:'d',val:normals}])
+            ),
+            N('Layer',[{type:'I',val:0}],
+              N('Version',[{type:'I',val:100}]),
+              N('LayerElement',[],
+                N('Type',[{type:'S',val:'LayerElementNormal'}]),
+                N('TypedIndex',[{type:'I',val:0}])
+              )
+            )
+          ),
+          N('Model',[{type:'L',val:mid},{type:'S',val:`Model::${nm}`},{type:'S',val:'Mesh'}],
+            N('Version',[{type:'I',val:232}]),
+            N('Properties70',[],
+              N('P',[{type:'S',val:'DefaultAttributeIndex'},{type:'S',val:'int'},{type:'S',val:'Integer'},{type:'S',val:''},{type:'I',val:0}])
+            ),
+            N('Shading',[{type:'I',val:1}]),
+            N('Culling',[{type:'S',val:'CullingOff'}])
+          ),
+          N('Material',[{type:'L',val:matid},{type:'S',val:`Material::${nm}`},{type:'S',val:''}],
+            N('Version',[{type:'I',val:102}]),
+            N('ShadingModel',[{type:'S',val:'Lambert'}]),
+            N('MultiLayer',[{type:'I',val:0}]),
+            N('Properties70',[],
+              N('P',[{type:'S',val:'DiffuseColor'},{type:'S',val:'Color'},{type:'S',val:''},{type:'S',val:'A'},{type:'D',val:r},{type:'D',val:g},{type:'D',val:b}]),
+              N('P',[{type:'S',val:'Diffuse'},{type:'S',val:'Vector3D'},{type:'S',val:'Vector'},{type:'S',val:''},{type:'D',val:r},{type:'D',val:g},{type:'D',val:b}]),
+              N('P',[{type:'S',val:'Emissive'},{type:'S',val:'Vector3D'},{type:'S',val:'Vector'},{type:'S',val:''},{type:'D',val:0.0},{type:'D',val:0.0},{type:'D',val:0.0}]),
+              N('P',[{type:'S',val:'Ambient'},{type:'S',val:'Vector3D'},{type:'S',val:'Vector'},{type:'S',val:''},{type:'D',val:0.0},{type:'D',val:0.0},{type:'D',val:0.0}])
+            )
+          )
+        ];
+      })
+    ),
+    N('Connections',[],
+      ...meshInfos.flatMap((_,mi)=>{
+        const gid=idBase+mi*3, mid=idBase+mi*3+1, matid=idBase+mi*3+2;
+        return[
+          N('C',[{type:'S',val:'OO'},{type:'L',val:gid},{type:'L',val:mid}]),
+          N('C',[{type:'S',val:'OO'},{type:'L',val:matid},{type:'L',val:mid}]),
+          N('C',[{type:'S',val:'OO'},{type:'L',val:mid},{type:'L',val:0}])
+        ];
+      })
+    )
+  ];
+
+  // Serialize tree with correct absolute endOffsets
+  const header=new Uint8Array([75,97,121,100,97,114,97,32,70,66,88,32,66,105,110,97,114,121,32,32,0,26,0]);
+  const verArr=new Uint8Array(4);new DataView(verArr.buffer).setUint32(0,7400,true);
+
+  const parts2=[header,verArr];
+  let pos=header.length+4;
+
+  function serNode(nd){
+    const nameB=enc.encode(nd.name);
+    // props
+    const pb=new FBXBuf();
+    nd.props.forEach(({type,val})=>pb.prop(type,val));
+    const propB=pb.toUint8();
+    // children
+    const childBufs=(nd.ch||[]).map(c=>serNode(c));
+    const hasCh=childBufs.length>0;
+    const sentinel=hasCh?new Uint8Array(13):new Uint8Array(0);
+    const childLen=childBufs.reduce((s,c)=>s+c.length,0)+sentinel.length;
+    // header: endOffset(u32)+numProps(u32)+propListLen(u32)+nameLen(u8)
+    const headerLen=4+4+4+1;
+    const endOffset=pos+headerLen+nameB.length+propB.length+childLen;
+    const hb=new FBXBuf();
+    hb.u32(endOffset);hb.u32(nd.props.length);hb.u32(propB.length);hb.u8(nameB.length);
+    hb.w(nameB);hb.w(propB);
+    childBufs.forEach(c=>hb.w(c));
+    hb.w(sentinel);
+    const bytes=hb.toUint8();
+    pos+=bytes.length;
+    return bytes;
+  }
+
+  const nodeParts=tree.map(nd=>serNode(nd));
+  // Final null record (25 zero bytes — FBX end marker)
+  const nullEnd=new Uint8Array(25);
+
+  // Assemble
+  const totalLen=header.length+4+nodeParts.reduce((s,p)=>s+p.length,0)+nullEnd.length;
+  const out=new Uint8Array(totalLen);
+  let off2=0;
+  [header,verArr,...nodeParts,nullEnd].forEach(p=>{out.set(p,off2);off2+=p.length;});
+
+  downloadBlob(new Blob([out.buffer],{type:'application/octet-stream'}),fname);
 }
 
 // GLTF/GLB with per-mesh PBR material colors
