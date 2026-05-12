@@ -78,64 +78,52 @@ canvas{display:block;width:100%;height:100%}
 .sh{font-size:9px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:9px;padding-bottom:5px;border-bottom:1px solid var(--border)}
 
 /* ── Param row ── */
-.pr{display:flex;align-items:center;height:var(--rh);margin-bottom:1px}
-.pr>label{width:var(--lw);flex-shrink:0;font-size:11px;color:var(--text2);cursor:default;letter-spacing:.01em}
-.track{flex:1;position:relative;height:var(--rh);display:flex;align-items:center}
-.track input[type=range]{
-  position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
-  width:100%;-webkit-appearance:none;appearance:none;
+.pr{display:flex;flex-direction:column;gap:4px;padding:5px 0 4px}
+.pr.tr,.pr.cr{flex-direction:row;align-items:center;padding:2px 0;gap:0}
+.pr.cr{height:26px;margin-bottom:4px}
+.pr.tr{height:26px;margin-bottom:3px}
+/* Row header: label left, number right */
+.pr-hd{display:flex;align-items:center;justify-content:space-between}
+.pr-hd label{font-size:11px;color:var(--text2);cursor:default;letter-spacing:.01em}
+.pr-hd input[type=number]{
+  width:52px;height:20px;
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;
+  color:var(--text);background:var(--input-bg);
+  border:1px solid var(--border2);border-radius:3px;
+  padding:0 6px;text-align:right;outline:none;cursor:text;
+  -moz-appearance:textfield;
+}
+.pr-hd input[type=number]::-webkit-outer-spin-button,
+.pr-hd input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+.pr-hd input[type=number]:focus{color:var(--accent);border-color:var(--accent)}
+/* Full-width range below header */
+.pr>input[type=range]{
+  display:block;width:100%;-webkit-appearance:none;appearance:none;
   height:3px;border-radius:2px;outline:none;cursor:pointer;margin:0;padding:0;
   background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--pct,0%),#1c1d22 var(--pct,0%),#1c1d22 100%);
 }
-.track input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 0 0 1px var(--accent2);cursor:pointer;transition:transform .1s}
-.track input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.15)}
-.track input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:2px solid #fff;cursor:pointer}
-.track input[type=number]{
-  position:absolute;right:0;top:50%;transform:translateY(-50%);
-  width:50px;height:22px;z-index:4;
-  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;
-  color:var(--text);background:var(--panel);
-  border:none;border-left:1px solid var(--border2);
-  padding:0 5px;text-align:right;outline:none;cursor:text;
-  -moz-appearance:textfield;
-}
-.track input[type=number]::-webkit-outer-spin-button,.track input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
-.track input[type=number]:focus{background:var(--input-bg);color:var(--accent);border-left-color:var(--accent)}
-.track .sv{position:absolute;right:0;top:50%;transform:translateY(-50%);width:28px;text-align:right;font-size:11px;font-weight:600;color:var(--text);pointer-events:none;z-index:4;background:var(--panel);padding-left:3px}
-
+.pr>input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 0 0 1px var(--accent2);cursor:pointer;transition:transform .1s}
+.pr>input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.15)}
+.pr>input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:2px solid #fff;cursor:pointer}
+/* Direct label in .cr and .tr rows */
+.pr.cr>label{width:var(--lw);flex-shrink:0;font-size:11px;color:var(--text2);cursor:default;letter-spacing:.01em}
+.pr.tr>label{flex:1;width:auto;cursor:pointer;font-size:11px;color:var(--text2)}
 /* Color row */
-.pr.cr{height:26px;margin-bottom:4px}
 .ci{flex:1;display:flex;align-items:center;gap:6px}
-/* Color swatch — bg set via JS style so it actually shows */
 .csw{width:22px;height:22px;border-radius:3px;flex-shrink:0;border:1px solid var(--border2);cursor:pointer;position:relative;overflow:hidden}
 .csw input[type=color]{position:absolute;opacity:0;width:200%;height:200%;top:-50%;left:-50%;cursor:pointer}
 .chex{flex:1;height:22px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);background:var(--input-bg);border:1px solid var(--border2);border-radius:3px;padding:0 6px;outline:none;letter-spacing:.04em;text-transform:uppercase}
 .chex:focus{border-color:var(--accent);color:var(--accent)}
-
-/* Toggle row */
-.pr.tr{height:26px;margin-bottom:3px}
-.pr.tr>label{flex:1;width:auto;cursor:pointer;font-size:11px;color:var(--text2)}
+/* Toggle */
 .tog{width:30px;height:16px;border-radius:8px;background:var(--input-bg);border:1px solid var(--border2);position:relative;cursor:pointer;transition:background .15s,border-color .15s;flex-shrink:0}
 .tog::after{content:'';position:absolute;left:2px;top:50%;transform:translateY(-50%);width:10px;height:10px;border-radius:50%;background:var(--text3);transition:left .15s,background .15s}
 .tog.on{background:var(--accent2);border-color:var(--accent)}
 .tog.on::after{left:16px;background:#fff}
 .disabled{opacity:.3;pointer-events:none}
-
 /* Layers */
 .li{display:flex;align-items:center;gap:6px;padding:2px 0}
 .lsw{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .lnm{font-size:10px;color:var(--text2)}
-/* Layer depth number input (smaller than main param inputs) */
-.li input[type=number]{
-  width:46px;height:20px;z-index:4;
-  font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
-  color:var(--text);background:var(--panel);
-  border:none;border-left:1px solid var(--border2);
-  padding:0 4px;text-align:right;outline:none;cursor:text;
-  -moz-appearance:textfield;position:absolute;right:0;top:50%;transform:translateY(-50%);
-}
-.li input[type=number]::-webkit-outer-spin-button,.li input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
-.li input[type=number]:focus{background:var(--input-bg);color:var(--accent);border-left-color:var(--accent)}
 
 /* Info */
 .ig{display:grid;grid-template-columns:auto 1fr;gap:2px 8px}
@@ -145,6 +133,11 @@ canvas{display:block;width:100%;height:100%}
 .fn{font-size:10px;color:var(--text3);line-height:1.9}
 .fn .ok{color:var(--green)}
 .fn .no{color:var(--red)}
+
+/* Layer eye visibility toggle */
+.leye{width:16px;height:16px;flex-shrink:0;cursor:pointer;color:var(--text3);display:flex;align-items:center;justify-content:center;border-radius:2px;transition:color .12s}
+.leye:hover{color:var(--text)}
+.leye.off{color:var(--border2)}
 </style>
 </head>
 <body>
@@ -165,6 +158,12 @@ canvas{display:block;width:100%;height:100%}
   <button class="tbtn" id="btn-wf" title="Wireframe" onclick="toggleWireframe()">
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 2h12v12H2zM2 2l6 6M14 2l-6 6M2 14l6-6M14 14l-6-6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
     Wireframe
+  </button>
+
+  <!-- Curve viewer toggle -->
+  <button class="tbtn" id="btn-curve" title="Curve Viewer" onclick="toggleCurveViewer()">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M1 13 C4 13 4 3 8 3 C12 3 12 13 15 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>
+    Curves
   </button>
 
   <!-- Auto-rotate -->
@@ -229,23 +228,18 @@ canvas{display:block;width:100%;height:100%}
     <div class="sec">
       <div class="sh">Geometry</div>
       <div class="pr">
-        <label>Depth</label>
-        <div class="track">
-          <input type="range" id="r-depth" min="1" max="200" value="40" oninput="sp('depth',+this.value,'r')">
-          <input type="number" id="n-depth" min="1" max="999" value="40" oninput="sp('depth',+this.value,'n')">
+        <div class="pr-hd">
+          <label>Depth</label>
+          <input type="number" id="n-depth" min="1" max="9999" value="40" oninput="sp('depth',+this.value,'n')">
         </div>
+        <input type="range" id="r-depth" min="1" max="500" value="40" oninput="sp('depth',+this.value,'r')">
       </div>
       <div class="pr">
-        <label>Curves</label>
-        <div class="track">
-          <!-- NOTE: curveSegments works at rebuild time — value stored in P.seg -->
-          <input type="range" id="r-seg" min="4" max="64" step="2" value="24" oninput="sp('seg',+this.value,'r')">
-          <span class="sv" id="sv-seg">24</span>
+        <div class="pr-hd">
+          <label title="Curve segment resolution — affects rounded shapes">Smoothness</label>
+          <input type="number" id="n-seg" min="4" max="128" step="2" value="24" oninput="sp('seg',+this.value,'n')">
         </div>
-      </div>
-      <div class="pr tr">
-        <label>Close open paths</label>
-        <div class="tog on" id="tgl-close" onclick="toggleFlag('closePaths')"></div>
+        <input type="range" id="r-seg" min="4" max="64" step="2" value="24" oninput="sp('seg',+this.value,'r')">
       </div>
     </div>
 
@@ -258,18 +252,18 @@ canvas{display:block;width:100%;height:100%}
       </div>
       <div id="bevel-params" class="disabled">
         <div class="pr">
-          <label>Size</label>
-          <div class="track">
-            <input type="range" id="r-bsize" min="0" max="30" step=".5" value="3" oninput="sp('bsize',+this.value,'r')">
+          <div class="pr-hd">
+            <label>Size</label>
             <input type="number" id="n-bsize" min="0" max="99" step=".5" value="3" oninput="sp('bsize',+this.value,'n')">
           </div>
+          <input type="range" id="r-bsize" min="0" max="30" step=".5" value="3" oninput="sp('bsize',+this.value,'r')">
         </div>
         <div class="pr">
-          <label>Segments</label>
-          <div class="track">
-            <input type="range" id="r-bseg" min="1" max="8" step="1" value="3" oninput="sp('bseg',+this.value,'r')">
-            <span class="sv" id="sv-bseg">3</span>
+          <div class="pr-hd">
+            <label>Segments</label>
+            <input type="number" id="n-bseg" min="1" max="8" step="1" value="3" oninput="sp('bseg',+this.value,'n')">
           </div>
+          <input type="range" id="r-bseg" min="1" max="8" step="1" value="3" oninput="sp('bseg',+this.value,'r')">
         </div>
       </div>
     </div>
@@ -278,18 +272,18 @@ canvas{display:block;width:100%;height:100%}
     <div class="sec">
       <div class="sh">Material</div>
       <div class="pr">
-        <label>Metallic</label>
-        <div class="track">
-          <input type="range" id="r-metal" min="0" max="1" step=".01" value="0" oninput="sp('metal',+this.value,'r')">
-          <span class="sv" id="sv-metal">0.00</span>
+        <div class="pr-hd">
+          <label>Metallic</label>
+          <input type="number" id="n-metal" min="0" max="1" step=".01" value="0" oninput="sp('metal',+this.value,'n')">
         </div>
+        <input type="range" id="r-metal" min="0" max="1" step=".01" value="0" oninput="sp('metal',+this.value,'r')">
       </div>
       <div class="pr">
-        <label>Roughness</label>
-        <div class="track">
-          <input type="range" id="r-rough" min="0" max="1" step=".01" value="1" oninput="sp('rough',+this.value,'r')">
-          <span class="sv" id="sv-rough">1.00</span>
+        <div class="pr-hd">
+          <label>Roughness</label>
+          <input type="number" id="n-rough" min="0" max="1" step=".01" value="1" oninput="sp('rough',+this.value,'n')">
         </div>
+        <input type="range" id="r-rough" min="0" max="1" step=".01" value="1" oninput="sp('rough',+this.value,'r')">
       </div>
     </div>
 
@@ -346,7 +340,15 @@ canvas{display:block;width:100%;height:100%}
     <!-- LAYERS -->
     <div class="sec">
       <div class="sh">Layers</div>
+      <div class="pr tr" style="margin-bottom:8px">
+        <label>Close open paths</label>
+        <div class="tog on" id="tgl-close" onclick="toggleFlag('closePaths')"></div>
+      </div>
       <div id="lay-list"><span class="lnm">–</span></div>
+      <div class="pr tr" style="margin-top:9px;padding-top:8px;border-top:1px solid var(--border)">
+        <label title="Union overlapping shapes per color — removes z-fighting &amp; inner seams">Boolean Union</label>
+        <div class="tog" id="tgl-union" onclick="toggleFlag('union')"></div>
+      </div>
     </div>
 
     <!-- INFO -->
@@ -383,15 +385,23 @@ canvas{display:block;width:100%;height:100%}
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
 const P = { depth:40, seg:24, bsize:3, bseg:3, metal:0, rough:1 };
-const F = { bevel:false, wf:false, sw:false, edge:true, bg:false, closePaths:true };
+const F = { bevel:false, wf:false, sw:false, edge:true, bg:false, closePaths:true, union:false };
 let swColor='#ff6b35', edgeColor='#ffffff', bgColor='#222222';
 
-let scene, camera, renderer, root, edgeRoot, debugRoot, autoRot=false;
+let scene, camera, renderer, root, edgeRoot, debugRoot, curveRoot, autoRot=false;
 let drag=false, rBtn=false, px=0, py=0;
 let faceMats={}, sidewallMat=null;
 let parsed=null;
 // Per-layer depth overrides: hex → depth value (or null = use global P.depth)
 const layerDepths = {};
+// Per-layer visibility: hex → bool (default true)
+const layerVisible = {};
+// Meshes by color key for visibility toggling
+const layerMeshes = {};
+// Curve viewer mode
+let curveMode = false;
+// Slider drag guard: prevents full layer-list HTML rebuild mid-drag
+let _sliderDragging = false, _rebuildPending = false;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function boot(){
@@ -409,6 +419,15 @@ const layerDepths = {};
   };
   resize(); window.addEventListener('resize',resize);
 
+  // Slider drag guard
+  document.addEventListener('mousedown',e=>{if(e.target.type==='range')_sliderDragging=true;});
+  document.addEventListener('mouseup',()=>{
+    if(_sliderDragging){_sliderDragging=false;if(_rebuildPending){_rebuildPending=false;rebuild(true);}}
+  });
+  document.addEventListener('touchend',()=>{
+    if(_sliderDragging){_sliderDragging=false;if(_rebuildPending){_rebuildPending=false;rebuild(true);}}
+  });
+
   // Mouse
   cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('mousedown',e=>{drag=true;rBtn=e.button===2;px=e.clientX;py=e.clientY;});
@@ -420,10 +439,12 @@ const layerDepths = {};
       root.position.x+=dx*.22;root.position.y-=dy*.22;
       if(edgeRoot){edgeRoot.position.x=root.position.x;edgeRoot.position.y=root.position.y;}
       if(debugRoot){debugRoot.position.x=root.position.x;debugRoot.position.y=root.position.y;}
+      if(curveRoot){curveRoot.position.x=root.position.x;curveRoot.position.y=root.position.y;}
     } else {
       root.rotation.y+=dx*.007;root.rotation.x+=dy*.007;
       if(edgeRoot){edgeRoot.rotation.y=root.rotation.y;edgeRoot.rotation.x=root.rotation.x;}
       if(debugRoot){debugRoot.rotation.y=root.rotation.y;debugRoot.rotation.x=root.rotation.x;}
+      if(curveRoot){curveRoot.rotation.y=root.rotation.y;curveRoot.rotation.x=root.rotation.x;}
     }
     px=e.clientX;py=e.clientY;
   });
@@ -445,9 +466,11 @@ const layerDepths = {};
     }
   });
 
-  // Init slider fills
+  // Init slider fills + number displays
   ['depth','seg','bsize','bseg','metal','rough'].forEach(k=>{
-    const el=document.getElementById('r-'+k);if(el)slFill(el);
+    const r=document.getElementById('r-'+k);if(r)slFill(r);
+    const n=document.getElementById('n-'+k);
+    if(n&&r)n.value=(+r.value%1===0)?+r.value:(+r.value).toFixed(2);
   });
 
   // Init color swatches
@@ -465,6 +488,7 @@ const layerDepths = {};
       root.rotation.y+=.005;
       if(edgeRoot){edgeRoot.rotation.y=root.rotation.y;}
       if(debugRoot){debugRoot.rotation.y=root.rotation.y;}
+      if(curveRoot){curveRoot.rotation.y=root.rotation.y;}
     }
     renderer.render(scene,camera);
   })();
@@ -497,16 +521,16 @@ function sp(key,val,src){
   val=isNaN(val)?0:val;
   const rEl=document.getElementById('r-'+key);
   const nEl=document.getElementById('n-'+key);
-  const sEl=document.getElementById('sv-'+key);
-  if(rEl) val=Math.max(+rEl.min,Math.min(+rEl.max,val));
+  // Clamp to number input max (wider range) when editing number; otherwise use slider max
+  const maxEl=src==='n'&&nEl?nEl:rEl;
+  if(maxEl) val=Math.max(+maxEl.min||0,Math.min(+maxEl.max||Infinity,val));
   P[key]=val;
-  if(src!=='r'&&rEl){rEl.value=val;slFill(rEl);}
+  // Slider only shows up to its own max — clamp visually but keep real value
+  if(src!=='r'&&rEl){rEl.value=Math.min(val,+rEl.max);slFill(rEl);}
   if(src==='r'&&rEl)slFill(rEl);
-  if(nEl&&src!=='n')nEl.value=val;
-  if(sEl)sEl.textContent=(val%1===0)?val:val.toFixed(2);
-  // mat-only: just update existing mats, no full rebuild
+  if(nEl&&src!=='n')nEl.value=(val%1===0)?val:val.toFixed(2);
   if(key==='metal'||key==='rough')updateMats();
-  else rebuild(); // camera untouched
+  else rebuild();
 }
 
 // ── Toggle flags ──────────────────────────────────────────────────────────────
@@ -521,6 +545,8 @@ function toggleFlag(key){
     if(F.bg) scene.background=new THREE.Color(bgColor);
     else makeMayaBg();
   } else if(key==='closePaths'){
+    rebuild();
+  } else if(key==='union'){
     rebuild();
   }
 }
@@ -608,8 +634,11 @@ function parseSVG(txt,name){
 }
 
 // ── Rebuild (no camera reset) ─────────────────────────────────────────────────
-function rebuild(){
+function rebuild(updateLayerList=true){
   if(!parsed)return;
+  // If a slider is being dragged, defer the layer-list HTML rebuild to mouseup
+  if(_sliderDragging&&updateLayerList){updateLayerList=false;_rebuildPending=true;}
+
   const{byColor,vb}=parsed;
   const sRot=root?root.rotation.clone():null;
   const sPos=root?root.position.clone():null;
@@ -619,14 +648,18 @@ function rebuild(){
   if(debugRoot){scene.remove(debugRoot);debugRoot.traverse(o=>{if(o.isLine||o.isLineSegments)o.geometry.dispose();});}
   root=new THREE.Group();edgeRoot=null;debugRoot=null;
   faceMats={};sidewallMat=null;
+  // Reset mesh map (rebuilt below)
+  Object.keys(layerMeshes).forEach(k=>delete layerMeshes[k]);
 
   const sc=200/Math.max(vb.w,vb.h);
   const bsizeU=P.bsize*sc*.25;
-  const baseDepthU=P.depth*sc*.5;
+  // Depth in world units: divide by sc so mesh.scale.z=sc cancels out → depth=P.depth world units
+  const baseDepthU=P.depth/sc;
 
   if(F.sw)sidewallMat=mkMat(swColor);
 
-  const layEl=document.getElementById('lay-list');layEl.innerHTML='';
+  const layEl=document.getElementById('lay-list');
+  if(updateLayerList)layEl.innerHTML='';
   let tv=0,tf=0;
   let totalOpen=0;
 
@@ -639,21 +672,15 @@ function rebuild(){
     els.forEach(el=>{
       sampleEl(el).forEach(pts=>{
         if(pts.length<3)return;
-        // Better open path detection with adaptive tolerance
         const dx=pts[0].x-pts[pts.length-1].x, dy=pts[0].y-pts[pts.length-1].y;
         const dist=Math.sqrt(dx*dx+dy*dy);
-        // Calculate path bounding box to make tolerance relative
         const bb=getBB(pts);
         const pathSize=Math.max(bb.w,bb.h);
-        // Adaptive tolerance: 0.1% of path size or minimum 0.1
         const tolerance=Math.max(0.1, pathSize*0.001);
         const isOpen=dist>tolerance;
-        
         if(isOpen && F.closePaths){
-          // Force-close: snap last point to first
           pts.push({x:pts[0].x, y:pts[0].y});
         } else if(isOpen && !F.closePaths){
-          // Skip open contours entirely
           openFlags.push(true);
           return;
         }
@@ -666,13 +693,13 @@ function rebuild(){
     const hasOpen=openFlags.some(Boolean);
     if(hasOpen)totalOpen+=openFlags.filter(Boolean).length;
 
-    const shapes=buildCompoundFromContours(allContours);
+    const shapes=F.union?clipperUnion(allContours):buildCompoundFromContours(allContours);
     if(!shapes.length){
-      appendLayerItem(layEl,hex,0,layIdx,openFlags.filter(Boolean).length,true);
+      if(updateLayerList)appendLayerItem(layEl,hex,0,layIdx,openFlags.filter(Boolean).length,true);
       return;
     }
 
-    const layDepth=layerDepths[hex]!=null ? layerDepths[hex]*sc*.5 : baseDepthU;
+    const layDepth=layerDepths[hex]!=null ? layerDepths[hex]/sc : baseDepthU;
     const opts={
       depth:layDepth,
       bevelEnabled:F.bevel&&P.bsize>0,
@@ -692,25 +719,30 @@ function rebuild(){
     mesh.position.set(-(vb.x+vb.w/2)*sc,(vb.y+vb.h/2)*sc,0);
     mesh.userData.faceColor=hex;
     mesh.userData.hasOpen=hasOpen;
+    // Apply stored visibility
+    if(layerVisible[hex]===false)mesh.visible=false;
     root.add(mesh);
+    layerMeshes[hex]=mesh;
     if(hasOpen)openMeshIndices.add(root.children.length-1);
 
     tv+=geo.attributes.position.count;
     tf+=Math.round((geo.index?geo.index.count:geo.attributes.position.count)/3);
-    appendLayerItem(layEl,hex,layDepth/sc/.5,layIdx,openFlags.filter(Boolean).length,false);
+    if(updateLayerList)appendLayerItem(layEl,hex,layDepth/sc/.5,layIdx,openFlags.filter(Boolean).length,false);
   });
 
   if(sRot){root.rotation.copy(sRot);root.position.copy(sPos);}
+  // In curve mode, hide the 3D geometry
+  root.visible=!curveMode;
   scene.add(root);
 
   document.getElementById('inf').innerHTML=
     `<span>Vtx</span><span>${tv.toLocaleString()}</span><span>Faces</span><span>${tf.toLocaleString()}</span><span>Colors</span><span>${Object.keys(byColor).length}</span>`;
 
-  // Show/hide viewport legend for unclosed paths
   const legend=document.getElementById('open-legend');
   if(legend)legend.style.display=totalOpen>0?'flex':'none';
 
   rebuildEdges(openMeshIndices);
+  if(curveMode)buildCurveViewer();
 }
 
 function appendLayerItem(layEl,hex,depthVal,layIdx,openCount,noGeo){
@@ -719,22 +751,26 @@ function appendLayerItem(layEl,hex,depthVal,layIdx,openCount,noGeo){
   li.style.cssText='flex-direction:column;align-items:stretch;gap:3px;padding:4px 0;border-bottom:0.5px solid var(--border)';
   const stored=layerDepths[hex];
   const dv=stored!=null?stored:P.depth;
+  const vis=layerVisible[hex]!==false;
   const warn=openCount>0?`<span style="color:#ff4444;font-size:9px;margin-left:4px">⚠ ${openCount} open</span>`:'';
+  const eyeOn=`<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><ellipse cx="8" cy="8" rx="6" ry="4" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>`;
+  const eyeOff=`<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 2l12 12M6.5 5.5A6 4 0 0114 8c-.6.9-1.5 1.7-2.5 2.2M3 6.5A6 4 0 002 8c1 1.7 3.3 3 6 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
   li.innerHTML=`
     <div style="display:flex;align-items:center;gap:5px">
-      <div class="lsw" style="background:${hex};flex-shrink:0"></div>
-      <span class="lnm" style="flex:1">${hex}</span>
+      <span class="leye${vis?'':' off'}" onclick="toggleLayerVis('${hex}',this)" title="Toggle visibility">${vis?eyeOn:eyeOff}</span>
+      <div class="lsw" style="background:${hex};flex-shrink:0;opacity:${vis?1:.35}"></div>
+      <span class="lnm" style="flex:1;opacity:${vis?1:.45}">${hex}</span>
       ${warn}
     </div>
-    <div style="display:flex;align-items:center;gap:4px;padding-left:16px">
+    <div style="display:flex;align-items:center;gap:4px;padding-left:16px;opacity:${vis?1:.4}">
       <span style="font-size:9px;color:var(--text3);width:36px;flex-shrink:0">depth</span>
-      <div class="track" style="flex:1;height:24px;min-width:0">
-        <input type="range" min="1" max="200" step="1" value="${dv}"
-          style="--pct:${((dv-1)/199*100).toFixed(1)}%"
-          oninput="setLayerDepth('${hex}',+this.value,this)">
-        <input type="number" min="1" max="500" value="${dv}"
-          style="font-size:10px"
+      <div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0">
+        <input type="number" min="1" max="9999" value="${dv}"
+          style="width:100%;height:19px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:var(--text);background:var(--input-bg);border:1px solid var(--border2);border-radius:3px;padding:0 5px;text-align:right;outline:none;-moz-appearance:textfield"
           oninput="setLayerDepth('${hex}',+this.value,null,this)">
+        <input type="range" min="1" max="500" step="1" value="${Math.min(500,dv)}"
+          style="width:100%;--pct:${((Math.min(500,dv)-1)/499*100).toFixed(1)}%;height:3px;-webkit-appearance:none;appearance:none;border-radius:2px;outline:none;cursor:pointer;background:linear-gradient(to right,var(--accent) 0%,var(--accent) ${((Math.min(500,dv)-1)/499*100).toFixed(1)}%,#1c1d22 ${((Math.min(500,dv)-1)/499*100).toFixed(1)}%,#1c1d22 100%)"
+          oninput="setLayerDepth('${hex}',+this.value,this,null)">
       </div>
     </div>`;
   layEl.appendChild(li);
@@ -748,10 +784,16 @@ function setLayerDepth(hex,val,sliderEl,numEl){
   if(li){
     const sl=li.querySelector('input[type=range]');
     const nu=li.querySelector('input[type=number]');
-    if(sl&&sl!==sliderEl){sl.value=Math.min(200,val);const pct=((Math.min(200,val)-1)/199*100).toFixed(1);sl.style.setProperty('--pct',pct+'%');}
+    if(sl&&sl!==sliderEl){
+      sl.value=Math.min(500,val);
+      const pct=((Math.min(500,val)-1)/499*100).toFixed(1);
+      sl.style.setProperty('--pct',pct+'%');
+      sl.style.background=`linear-gradient(to right,var(--accent) 0%,var(--accent) ${pct}%,#1c1d22 ${pct}%,#1c1d22 100%)`;
+    }
     if(nu&&nu!==numEl)nu.value=val;
   }
-  rebuild();
+  // Don't rebuild the layer list while slider is being dragged
+  rebuild(false);
 }
 
 // Compound builder from pre-collected contours (reused from rebuild)
@@ -769,6 +811,94 @@ function buildCompoundFromContours(contours){
     result.push(shape);
   }
   return result;
+}
+
+// ── CSG Boolean Union (2D, via Clipper.js) ────────────────────────────────────
+// ── Pathfinder Union: canvas-rasterise → marching-squares trace ──────────────
+// Self-contained, no external library needed.
+function clipperUnion(contours){
+  if(!contours.length)return buildCompoundFromContours(contours);
+  try{
+    const allPts=contours.flatMap(c=>c.pts);
+    let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    allPts.forEach(p=>{x0=Math.min(x0,p.x);y0=Math.min(y0,p.y);x1=Math.max(x1,p.x);y1=Math.max(y1,p.y);});
+    const PAD=4, RES=Math.min(2048,Math.max(512,Math.ceil(Math.max(x1-x0,y1-y0)*4)));
+    const sc=RES/Math.max(x1-x0,y1-y0);
+    const W=Math.ceil((x1-x0)*sc)+PAD*2, H=Math.ceil((y1-y0)*sc)+PAD*2;
+    const cv=new OffscreenCanvas(W,H);
+    const ctx=cv.getContext('2d');
+    ctx.fillStyle='#fff';
+    contours.forEach(c=>{
+      ctx.beginPath();
+      c.pts.forEach((p,i)=>{
+        const px=(p.x-x0)*sc+PAD, py=(p.y-y0)*sc+PAD;
+        i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+      });
+      ctx.closePath();ctx.fill();
+    });
+    const {data}=ctx.getImageData(0,0,W,H);
+    const inside=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&data[(y*W+x)*4+3]>64;
+
+    // Marching-squares: extract all closed iso-contours at the fill boundary
+    const visited=new Uint8Array(W*H);
+    const outContours=[];
+    const dirs=[[1,0],[0,1],[-1,0],[0,-1]]; // R D L U
+    for(let sy=1;sy<H-1;sy++){
+      for(let sx=1;sx<W-1;sx++){
+        if(visited[sy*W+sx]||!inside(sx,sy)||!inside(sx-1,sy-1)||inside(sx-1,sy)&&inside(sx,sy-1))continue;
+        // find a boundary pixel: filled AND at least one empty neighbour above or left
+        if(inside(sx-1,sy)||inside(sx,sy-1))continue;
+        // Simple boundary trace (Moore neighbourhood)
+        const poly=[];
+        let cx=sx,cy=sy,dir=0;
+        let steps=0,maxSteps=W*H;
+        do{
+          poly.push({x:(cx-PAD)/sc+x0, y:(cy-PAD)/sc+y0});
+          visited[cy*W+cx]=1;
+          // try to turn left first (keeps boundary on the left)
+          const left=(dir+3)%4, fwd=dir, right=(dir+1)%4;
+          const nl=dirs[left], nf=dirs[fwd], nr=dirs[right];
+          if(inside(cx+nl[0],cy+nl[1])){dir=left;cx+=nl[0];cy+=nl[1];}
+          else if(inside(cx+nf[0],cy+nf[1])){cx+=nf[0];cy+=nf[1];}
+          else if(inside(cx+nr[0],cy+nr[1])){dir=right;cx+=nr[0];cy+=nr[1];}
+          else{dir=(dir+2)%4;} // backtrack
+          steps++;
+        }while((cx!==sx||cy!==sy)&&steps<maxSteps);
+        if(poly.length>8)outContours.push(poly);
+      }
+    }
+    if(!outContours.length)return buildCompoundFromContours(contours);
+
+    // Simplify polygons (Douglas-Peucker, epsilon = 1 canvas pixel back-converted)
+    const eps=1/sc;
+    function dpSimplify(pts,e){
+      if(pts.length<=2)return pts;
+      let maxD=0,idx=0;
+      const dx=pts[pts.length-1].x-pts[0].x, dy=pts[pts.length-1].y-pts[0].y;
+      const len=Math.sqrt(dx*dx+dy*dy)||1;
+      for(let i=1;i<pts.length-1;i++){
+        const d=Math.abs((pts[i].y-pts[0].y)*dx-(pts[i].x-pts[0].x)*dy)/len;
+        if(d>maxD){maxD=d;idx=i;}
+      }
+      if(maxD>e){
+        const a=dpSimplify(pts.slice(0,idx+1),e);
+        const b=dpSimplify(pts.slice(idx),e);
+        return[...a.slice(0,-1),...b];
+      }
+      return[pts[0],pts[pts.length-1]];
+    }
+    const simplified=outContours.map(p=>dpSimplify(p,eps));
+
+    // Sort by area, build shapes + holes (same logic as buildCompoundFromContours)
+    const processed=simplified.map(pts=>{
+      const a=signedArea(pts),bb=getBB(pts);
+      return{pts,a,bb,abs:Math.abs(a)};
+    });
+    return buildCompoundFromContours(processed);
+  }catch(e){
+    console.warn('Union failed, fallback:',e);
+    return buildCompoundFromContours(contours);
+  }
 }
 
 // ── Edge lines — auto contrast color based on face luminance ──────────────────
@@ -1135,6 +1265,69 @@ function getLuminance(hex){
 function getContrastLineColor(faceHex){
   return getLuminance(faceHex)>0.5?'#1a1a1a':'#ffffff';
 }
+// ── Layer visibility ──────────────────────────────────────────────────────────
+function toggleLayerVis(hex,eyeEl){
+  const vis=layerVisible[hex]===false?true:false; // toggle
+  layerVisible[hex]=vis;
+  const eyeOn=`<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><ellipse cx="8" cy="8" rx="6" ry="4" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>`;
+  const eyeOff=`<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 2l12 12M6.5 5.5A6 4 0 0114 8c-.6.9-1.5 1.7-2.5 2.2M3 6.5A6 4 0 002 8c1 1.7 3.3 3 6 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+  eyeEl.innerHTML=vis?eyeOn:eyeOff;
+  eyeEl.classList.toggle('off',!vis);
+  // Update opacity of siblings
+  const li=eyeEl.closest('.li');
+  if(li){
+    const sw=li.querySelector('.lsw');const nm=li.querySelector('.lnm');const depth=li.children[1];
+    if(sw)sw.style.opacity=vis?1:.35;
+    if(nm)nm.style.opacity=vis?1:.45;
+    if(depth)depth.style.opacity=vis?1:.4;
+  }
+  // Apply to mesh and its edge lines
+  if(layerMeshes[hex])layerMeshes[hex].visible=vis;
+  // Sync edge lines: find matching child in edgeRoot by index
+  if(edgeRoot){
+    let meshIdx=0;
+    if(root){root.children.forEach((m,i)=>{if(m.userData&&m.userData.faceColor===hex)meshIdx=i;});}
+    if(edgeRoot.children[meshIdx])edgeRoot.children[meshIdx].visible=vis;
+  }
+}
+
+// ── Curve Viewer ──────────────────────────────────────────────────────────────
+function toggleCurveViewer(){
+  curveMode=!curveMode;
+  document.getElementById('btn-curve').classList.toggle('on',curveMode);
+  if(root)root.visible=!curveMode;
+  if(edgeRoot)edgeRoot.visible=!curveMode;
+  if(curveMode){
+    buildCurveViewer();
+  } else {
+    if(curveRoot){scene.remove(curveRoot);curveRoot.traverse(o=>{if(o.isLine||o.isLineSegments)o.geometry.dispose();});curveRoot=null;}
+  }
+}
+
+function buildCurveViewer(){
+  if(curveRoot){scene.remove(curveRoot);curveRoot.traverse(o=>{if(o.isLine||o.isLineSegments)o.geometry.dispose();});curveRoot=null;}
+  if(!parsed)return;
+  const{byColor,vb}=parsed;
+  curveRoot=new THREE.Group();
+  const sc=200/Math.max(vb.w,vb.h);
+  const ox=(vb.x+vb.w/2)*sc, oy=(vb.y+vb.h/2)*sc;
+  Object.entries(byColor).forEach(([hex,els])=>{
+    const mat=new THREE.LineBasicMaterial({color:new THREE.Color(hex)});
+    els.forEach(el=>{
+      sampleEl(el).forEach(pts=>{
+        if(pts.length<2)return;
+        const pos=new Float32Array(pts.length*3);
+        pts.forEach((p,i)=>{pos[i*3]=(p.x*sc)-ox;pos[i*3+1]=-((p.y*sc)-oy);pos[i*3+2]=0;});
+        const geo=new THREE.BufferGeometry();
+        geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+        curveRoot.add(new THREE.Line(geo,mat));
+      });
+    });
+  });
+  if(root){curveRoot.rotation.copy(root.rotation);curveRoot.position.copy(root.position);}
+  scene.add(curveRoot);
+}
+
 function toggleRot(){autoRot=!autoRot;document.getElementById('btn-rot').classList.toggle('on',autoRot);}
 function resetView(){
   camera.position.set(0,0,360);
