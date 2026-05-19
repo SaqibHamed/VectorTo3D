@@ -60,8 +60,11 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'IBM Plex Mono',mon
 
 /* ── Main ── */
 #main{display:flex;flex:1;overflow:hidden}
-#cw{flex:1;position:relative;cursor:grab}
+/* Canvas: flex:1 + min-width:0 → takes all remaining space, never pushes sidebar */
+#cw{flex:1;min-width:0;position:relative;cursor:grab}
 #cw:active{cursor:grabbing}
+/* Sidebar: fixed 232px, never shrinks, never grows */
+#side{width:232px;min-width:232px;max-width:232px;flex-shrink:0;flex-grow:0;}
 canvas{display:block;width:100%;height:100%}
 #hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;user-select:none}
 #hint .ico{font-size:36px;margin-bottom:10px;opacity:.18}
@@ -71,7 +74,8 @@ canvas{display:block;width:100%;height:100%}
 #cstat{position:absolute;bottom:7px;left:9px;font-size:9px;color:rgba(255,255,255,.18);pointer-events:none}
 
 /* ── Sidebar ── */
-#side{width:232px;flex-shrink:0;border-left:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+/* Sidebar base — scrollable content */
+#side{border-left:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
 #side::-webkit-scrollbar{width:3px}
 #side::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 .sec{border-bottom:1px solid var(--border);padding:9px 12px 11px}
@@ -134,10 +138,77 @@ canvas{display:block;width:100%;height:100%}
 .fn .ok{color:var(--green)}
 .fn .no{color:var(--red)}
 
-/* Layer eye visibility toggle */
+/* ── Layer eye visibility toggle ── */
 .leye{width:16px;height:16px;flex-shrink:0;cursor:pointer;color:var(--text3);display:flex;align-items:center;justify-content:center;border-radius:2px;transition:color .12s}
 .leye:hover{color:var(--text)}
 .leye.off{color:var(--border2)}
+
+/* ── Responsive: Tablet (≤900px) ── */
+@media (max-width:900px){
+  /* Topbar wraps */
+  #topbar{height:auto;flex-wrap:wrap;padding:6px 8px;gap:5px;align-items:center}
+  #sb{order:99;width:100%;text-align:right;margin-left:0;font-size:10px}
+
+  /* Main stacks vertically: canvas top, settings bottom */
+  #main{flex-direction:column;}
+
+  /* Canvas: fixed portion of viewport */
+  #cw{flex:none;height:45vh;min-height:200px}
+
+  /* Sidebar becomes bottom panel — override fixed desktop width */
+  #side{
+    width:100% !important;min-width:0 !important;max-width:none !important;
+    height:auto;max-height:55vh;
+    border-left:none;border-top:1px solid var(--border);
+    flex-direction:row;flex-wrap:wrap;align-content:flex-start;
+    overflow-y:auto;overflow-x:hidden;
+  }
+
+  /* Sections in 2 columns on tablet */
+  #side .sec{
+    width:50%;flex-shrink:0;
+    border-right:1px solid var(--border);
+    border-bottom:1px solid var(--border);
+    min-width:0;
+  }
+  #side .sec:nth-child(even){border-right:none}
+
+  /* Hint text shorter on mobile */
+  #hint p{font-size:10px;line-height:1.7}
+}
+
+/* ── Responsive: Mobile (≤540px) ── */
+@media (max-width:540px){
+  html,body{font-size:13px}
+
+  #cw{height:42vh}
+
+  #side{max-height:58vh !important}
+
+  /* Sections in 1 column on mobile */
+  #side .sec{width:100%;border-right:none}
+
+  /* Slightly larger touch targets */
+  .pr>input[type=range]{height:5px}
+  .pr>input[type=range]::-webkit-slider-thumb{width:18px;height:18px}
+  .tog{width:36px;height:20px}
+  .tog::after{width:14px;height:14px}
+  .tog.on::after{left:18px}
+
+  /* Buttons bigger for fingers */
+  .tbtn{height:34px;padding:0 12px;font-size:12px}
+  .ibtn{width:34px;height:34px}
+  #dz{padding:5px 12px;font-size:12px}
+
+  /* Hide some labels to save space */
+  .tbtn svg+*{display:inline}
+}
+
+/* Prevent canvas cursor on touch */
+@media (hover:none){
+  #cw{cursor:default}
+  #cw:active{cursor:default}
+}
 </style>
 </head>
 <body>
@@ -216,7 +287,8 @@ canvas{display:block;width:100%;height:100%}
     <div id="hint">
       <div class="ico">⬡</div>
       <p>Drop SVG here or use Load SVG above<br>
-        <kbd>L-drag</kbd> Rotate &nbsp; <kbd>R-drag</kbd> Pan &nbsp; <kbd>Scroll</kbd> Zoom</p>
+        <kbd>L-drag</kbd> Rotate &nbsp; <kbd>R-drag</kbd> Pan &nbsp; <kbd>Scroll</kbd> Zoom<br>
+        <span style="font-size:9px;opacity:.6">Touch: 1 finger=rotate · 2 fingers=pan · pinch=zoom</span></p>
     </div>
     <div id="loader">Extruding…</div>
     <div id="cstat">L: rotate · R: pan · Scroll: zoom</div>
@@ -309,6 +381,13 @@ canvas{display:block;width:100%;height:100%}
             <input type="text" class="chex" id="ch-sw" value="#FF6B35" maxlength="7" oninput="onHex('sw',this.value)">
           </div>
         </div>
+        <div class="pr">
+          <label>Specularity</label>
+          <div class="track">
+            <input type="range" id="r-swSpec" min="0" max="1" step=".01" value=".8" oninput="sp('swSpec',+this.value,'r')">
+            <span class="sv" id="sv-swSpec">.80</span>
+          </div>
+        </div>
       </div>
       <div style="height:6px"></div>
       <div class="pr tr">
@@ -341,6 +420,18 @@ canvas{display:block;width:100%;height:100%}
             <input type="text" class="chex" id="ch-bg" value="#222222" maxlength="7" oninput="onHex('bg',this.value)">
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- EXPORT OPTIONS -->
+    <div class="sec">
+      <div class="sh">Export Options</div>
+      <div class="pr tr">
+        <label title="Combine all layers into one mesh with multiple material slots">Combined Mesh</label>
+        <div class="tog" id="tgl-combinedExport" onclick="toggleFlag('combinedExport')"></div>
+      </div>
+      <div style="font-size:9px;color:var(--text3);line-height:1.6;padding:2px 0 4px">
+        <span id="export-mode-hint">Separate layers per color</span>
       </div>
     </div>
 
@@ -391,8 +482,8 @@ canvas{display:block;width:100%;height:100%}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
-const P = { depth:40, seg:1.0, bsize:3, bseg:3, metal:0, rough:1 };
-const F = { bevel:false, wf:false, sw:false, edge:true, bg:false, closePaths:true, union:false, render:false };
+const P = { depth:40, seg:1.0, bsize:3, bseg:3, metal:0, rough:1, swSpec:0.8 };
+const F = { bevel:false, wf:false, sw:false, edge:true, bg:false, closePaths:true, union:false, render:false, combinedExport:false };
 let swColor='#ff6b35', edgeColor='#ffffff', bgColor='#222222';
 
 let scene, camera, renderer, root, edgeRoot, debugRoot, curveRoot, autoRot=false;
@@ -403,6 +494,8 @@ let faceMats={}, sidewallMat=null;
 let parsed=null;
 // Per-layer depth overrides: hex → depth value (or null = use global P.depth)
 const layerDepths = {};
+// Per-layer color overrides: origHex → overrideHex (null = use original)
+const layerColors = {};
 // Per-layer visibility: hex → bool (default true)
 const layerVisible = {};
 // Meshes by color key for visibility toggling
@@ -422,6 +515,12 @@ let _sliderDragging = false, _rebuildPending = false;
   camera=new THREE.PerspectiveCamera(42,1,.1,5000);
   camera.position.set(0,0,360);
   makeMayaBg();
+
+  // Subtle persistent lights so MeshStandardMaterial (sidewall) shows specularity
+  // in normal (unlit) mode — low intensity, won't affect MeshBasicMaterial faces
+  const swAmb=new THREE.AmbientLight(0xffffff,0.15); scene.add(swAmb);
+  const swKey=new THREE.DirectionalLight(0xffffff,0.7); swKey.position.set(1,1.5,1).multiplyScalar(200); scene.add(swKey);
+  const swFill=new THREE.DirectionalLight(0x8899bb,0.25); swFill.position.set(-1,-0.5,0.8).multiplyScalar(200); scene.add(swFill);
 
   const resize=()=>{
     const w=wr.clientWidth,h=wr.clientHeight;
@@ -460,6 +559,88 @@ let _sliderDragging = false, _rebuildPending = false;
   });
   cv.addEventListener('wheel',e=>{e.preventDefault();camera.position.z=Math.max(20,Math.min(2000,camera.position.z+e.deltaY*.4));},{passive:false});
 
+  // ── Touch controls ────────────────────────────────────────────────────────
+  // 1 finger drag  = rotate
+  // 2 finger drag  = pan
+  // 2 finger pinch = zoom
+  let touches={};
+  let lastPinchDist=null;
+  let lastTouchMid={x:0,y:0};
+
+  function getTouches(e){
+    const t={};
+    for(const touch of e.touches)t[touch.identifier]={x:touch.clientX,y:touch.clientY};
+    return t;
+  }
+  function pinchDist(t){
+    const ids=Object.keys(t);
+    if(ids.length<2)return null;
+    const a=t[ids[0]],b=t[ids[1]];
+    return Math.hypot(b.x-a.x,b.y-a.y);
+  }
+  function touchMid(t){
+    const ids=Object.keys(t);
+    if(ids.length<2)return{x:t[ids[0]].x,y:t[ids[0]].y};
+    return{x:(t[ids[0]].x+t[ids[1]].x)/2,y:(t[ids[0]].y+t[ids[1]].y)/2};
+  }
+
+  cv.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    touches=getTouches(e);
+    lastPinchDist=pinchDist(touches);
+    lastTouchMid=touchMid(touches);
+  },{passive:false});
+
+  cv.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    if(!root&&!camera)return;
+    const cur=getTouches(e);
+    const n=e.touches.length;
+
+    if(n===1){
+      // 1 finger: rotate
+      const id=Object.keys(cur)[0];
+      const prev=touches[id];
+      if(prev){
+        const dx=cur[id].x-prev.x, dy=cur[id].y-prev.y;
+        root.rotation.y+=dx*.007; root.rotation.x+=dy*.007;
+        syncRoots();
+      }
+    } else if(n>=2){
+      // 2 fingers: pan + pinch zoom
+      const mid=touchMid(cur);
+      const dx=mid.x-lastTouchMid.x, dy=mid.y-lastTouchMid.y;
+      root.position.x+=dx*.22; root.position.y-=dy*.22;
+      syncRoots();
+
+      // Pinch zoom
+      const dist=pinchDist(cur);
+      if(lastPinchDist&&dist){
+        const delta=lastPinchDist-dist;
+        camera.position.z=Math.max(20,Math.min(2000,camera.position.z+delta*1.5));
+      }
+      lastPinchDist=dist;
+      lastTouchMid=mid;
+    }
+
+    touches=cur;
+  },{passive:false});
+
+  cv.addEventListener('touchend',e=>{
+    e.preventDefault();
+    touches=getTouches(e);
+    lastPinchDist=pinchDist(touches);
+    lastTouchMid=touchMid(touches);
+  },{passive:false});
+
+  function syncRoots(){
+    [edgeRoot,debugRoot,curveRoot].forEach(r=>{
+      if(!r)return;
+      r.rotation.copy(root.rotation);
+      r.position.copy(root.position);
+    });
+  }
+
   // Drop zones
   cv.addEventListener('dragover',e=>e.preventDefault());
   cv.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f)readFile(f);});
@@ -477,7 +658,7 @@ let _sliderDragging = false, _rebuildPending = false;
   });
 
   // Init slider fills + number displays
-  ['depth','seg','bsize','bseg','metal','rough'].forEach(k=>{
+  ['depth','seg','bsize','bseg','metal','rough','swSpec'].forEach(k=>{
     const r=document.getElementById('r-'+k);if(r)slFill(r);
     const n=document.getElementById('n-'+k);
     if(n&&r)n.value=(+r.value%1===0)?+r.value:(+r.value).toFixed(2);
@@ -539,7 +720,7 @@ function sp(key,val,src){
   if(src!=='r'&&rEl){rEl.value=Math.min(val,+rEl.max);slFill(rEl);}
   if(src==='r'&&rEl)slFill(rEl);
   if(nEl&&src!=='n')nEl.value=(val%1===0)?val:val.toFixed(2);
-  if(key==='metal'||key==='rough')updateMats();
+  if(key==='metal'||key==='rough'||key==='swSpec')updateMats();
   else rebuild();
 }
 
@@ -556,6 +737,9 @@ function toggleFlag(key){
     else makeMayaBg();
   } else if(key==='closePaths'){
     rebuild();
+  } else if(key==='combinedExport'){
+    const hint=document.getElementById('export-mode-hint');
+    if(hint)hint.textContent=F.combinedExport?'1 mesh · multiple material slots':'Separate layers per color';
   } else if(key==='union'){
     rebuild();
   }
@@ -598,13 +782,33 @@ function mkMat(color){
   }
   return new THREE.MeshBasicMaterial({color:new THREE.Color(color),wireframe:F.wf,side:THREE.DoubleSide});
 }
+
+// Sidewall always uses MeshStandardMaterial so metalness/roughness (specularity) work
+// even when face materials are MeshBasicMaterial (unlit mode)
+function mkSWMat(color){
+  return new THREE.MeshStandardMaterial({
+    color:new THREE.Color(color),
+    metalness:P.swSpec,
+    roughness:1-P.swSpec,
+    wireframe:F.wf,
+    side:THREE.DoubleSide
+  });
+}
+
 function updateMats(){
-  const all=[...Object.values(faceMats),sidewallMat].filter(Boolean);
+  const all=Object.values(faceMats).filter(Boolean);
   all.forEach(m=>{
     m.wireframe=F.wf;
     if(m.isMeshStandardMaterial){m.metalness=P.metal;m.roughness=P.rough;}
     m.needsUpdate=true;
   });
+  // Sidewall updated separately with its own specularity values
+  if(sidewallMat){
+    sidewallMat.wireframe=F.wf;
+    sidewallMat.metalness=P.swSpec;
+    sidewallMat.roughness=1-P.swSpec;
+    sidewallMat.needsUpdate=true;
+  }
 }
 
 // ── Studio environment (procedural equirect → PMREM) ─────────────────────────
@@ -701,7 +905,7 @@ function toggleRenderMode(){
       const newFace=mkMat(hex);
       faceMats[hex]=newFace;
       if(F.sw&&Array.isArray(mesh.material)&&mesh.material.length>1){
-        const newSW=mkMat(swColor);
+        const newSW=mkSWMat(swColor);
         sidewallMat=newSW;
         mesh.material=[newFace,newSW];
       } else {
@@ -786,7 +990,7 @@ function rebuild(updateLayerList=true){
   // Depth in world units: divide by sc so mesh.scale.z=sc cancels out → depth=P.depth world units
   const baseDepthU=P.depth/sc;
 
-  if(F.sw)sidewallMat=mkMat(swColor);
+  if(F.sw)sidewallMat=mkSWMat(swColor);
 
   const layEl=document.getElementById('lay-list');
   if(updateLayerList)layEl.innerHTML='';
@@ -845,7 +1049,7 @@ function rebuild(updateLayerList=true){
       bevelSegments:P.bseg,curveSegments:1
     };
     let geo;try{geo=new THREE.ExtrudeGeometry(shapes,opts);}catch(e){console.warn(hex,e);return;}
-    faceMats[hex]=mkMat(hex);
+    faceMats[hex]=mkMat(layerColors[hex]||hex);
     let mesh;
     if(F.sw&&sidewallMat){
       mesh=new THREE.Mesh(geo,[faceMats[hex],sidewallMat]);
@@ -890,14 +1094,27 @@ function appendLayerItem(layEl,hex,depthVal,layIdx,openCount,noGeo){
   const stored=layerDepths[hex];
   const dv=stored!=null?stored:P.depth;
   const vis=layerVisible[hex]!==false;
+  const displayHex=layerColors[hex]||hex; // use override color if set
   const warn=openCount>0?`<span style="color:#ff4444;font-size:9px;margin-left:4px">⚠ ${openCount} open</span>`:'';
   const eyeOn=`<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><ellipse cx="8" cy="8" rx="6" ry="4" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>`;
   const eyeOff=`<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 2l12 12M6.5 5.5A6 4 0 0114 8c-.6.9-1.5 1.7-2.5 2.2M3 6.5A6 4 0 002 8c1 1.7 3.3 3 6 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
   li.innerHTML=`
     <div style="display:flex;align-items:center;gap:5px">
       <span class="leye${vis?'':' off'}" onclick="toggleLayerVis('${hex}',this)" title="Toggle visibility">${vis?eyeOn:eyeOff}</span>
-      <div class="lsw" style="background:${hex};flex-shrink:0;opacity:${vis?1:.35}"></div>
-      <span class="lnm" style="flex:1;opacity:${vis?1:.45}">${hex}</span>
+      <!-- Editable color swatch -->
+      <div style="position:relative;width:20px;height:20px;border-radius:3px;border:1px solid var(--border2);flex-shrink:0;overflow:hidden;cursor:pointer;background:${displayHex}" title="Click to change color">
+        <input type="color" value="${displayHex}"
+          style="position:absolute;opacity:0;width:200%;height:200%;top:-50%;left:-50%;cursor:pointer"
+          oninput="setLayerColor('${hex}',this.value,this.closest('div'))">
+      </div>
+      <!-- Editable hex field -->
+      <input type="text" value="${displayHex.toUpperCase()}" maxlength="7"
+        style="width:70px;height:20px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+               color:var(--text);background:var(--input-bg);border:1px solid var(--border2);border-radius:3px;
+               padding:0 5px;outline:none;text-transform:uppercase;letter-spacing:.04em;opacity:${vis?1:.45}"
+        oninput="onLayerHex('${hex}',this.value,this)"
+        onfocus="this.select()">
+      <span class="lnm" style="flex:1;font-size:9px;color:var(--text3);opacity:${vis?1:.35}">${hex}</span>
       ${warn}
     </div>
     <div style="display:flex;align-items:center;gap:4px;padding-left:16px;opacity:${vis?1:.4}">
@@ -932,6 +1149,40 @@ function setLayerDepth(hex,val,sliderEl,numEl){
   }
   // Don't rebuild the layer list while slider is being dragged
   rebuild(false);
+}
+
+// ── Layer color override ──────────────────────────────────────────────────────
+function setLayerColor(origHex, newHex, swatchEl){
+  if(!/^#[0-9a-fA-F]{6}$/.test(newHex))return;
+  layerColors[origHex]=newHex;
+  // Update swatch background
+  if(swatchEl)swatchEl.style.background=newHex;
+  // Update material in-place (no full rebuild needed)
+  const mat=faceMats[origHex];
+  if(mat){mat.color.set(newHex);mat.needsUpdate=true;}
+  // Update mesh userData so export picks up new color
+  const mesh=layerMeshes[origHex];
+  if(mesh)mesh.userData.faceColor=newHex;
+  // Sync hex text input in same row
+  if(swatchEl){
+    const row=swatchEl.closest('div[style*="display:flex"]');
+    if(row){const hex=row.querySelector('input[type=text]');if(hex)hex.value=newHex.toUpperCase();}
+  }
+}
+
+function onLayerHex(origHex, val, inputEl){
+  if(!/^#[0-9a-fA-F]{6}$/.test(val))return;
+  layerColors[origHex]=val;
+  // Update swatch
+  const row=inputEl.closest('div[style*="display:flex"]');
+  if(row){const sw=row.querySelector('div[style*="border-radius:3px"]');if(sw)sw.style.background=val;}
+  // Update material
+  const mat=faceMats[origHex];
+  if(mat){mat.color.set(val);mat.needsUpdate=true;}
+  const mesh=layerMeshes[origHex];
+  if(mesh)mesh.userData.faceColor=val;
+  // Sync native color picker
+  if(row){const cp=row.querySelector('input[type=color]');if(cp)cp.value=val;}
 }
 
 // Compound builder from pre-collected contours (reused from rebuild)
@@ -1108,6 +1359,57 @@ function rebuildEdges(openMeshIndices){
 // ── Export ────────────────────────────────────────────────────────────────────
 function toggleDlMenu(){
   document.getElementById('dl-menu').classList.toggle('open');
+}
+
+// ── Merge all meshes into one BufferGeometry with multiple material groups ─────
+// Used when F.combinedExport = true. Returns {geo, materials[]} where
+// geo has one DrawRange group per original mesh with matching materialIndex.
+function mergeMeshesForExport(){
+  const meshList=root.children.filter(m=>m.isMesh);
+  if(!meshList.length)return null;
+
+  const mats=[];
+  const matIndex=new Map(); // color hex → index in mats[]
+
+  // Prepare all sub-geometries
+  const parts=meshList.map(mesh=>{
+    const geo=prepareExportMesh(mesh);
+    const hex=mesh.userData.faceColor||'#888888';
+    if(!matIndex.has(hex)){matIndex.set(hex,mats.length);mats.push(hex);}
+    return{geo, matIdx:matIndex.get(hex)};
+  });
+
+  // Count total vertices and faces
+  const totalVerts=parts.reduce((s,{geo})=>s+geo.attributes.position.count,0);
+  const totalIdx=parts.reduce((s,{geo})=>s+(geo.index?geo.index.count:geo.attributes.position.count),0);
+
+  const posArr=new Float32Array(totalVerts*3);
+  const norArr=new Float32Array(totalVerts*3);
+  const idxArr=new Uint32Array(totalIdx);
+  const groups=[];
+
+  let vOff=0, iOff=0;
+  parts.forEach(({geo,matIdx})=>{
+    const pos=geo.attributes.position, nor=geo.attributes.normal;
+    const vc=pos.count;
+    for(let i=0;i<vc;i++){
+      posArr[(vOff+i)*3]=pos.getX(i);posArr[(vOff+i)*3+1]=pos.getY(i);posArr[(vOff+i)*3+2]=pos.getZ(i);
+      norArr[(vOff+i)*3]=nor.getX(i);norArr[(vOff+i)*3+1]=nor.getY(i);norArr[(vOff+i)*3+2]=nor.getZ(i);
+    }
+    const idx=geo.index?Array.from(geo.index.array):Array.from({length:vc},(_,i)=>i);
+    const iStart=iOff;
+    idx.forEach((vi,j)=>idxArr[iOff+j]=vi+vOff);
+    groups.push({start:iStart, count:idx.length, materialIndex:matIdx});
+    vOff+=vc; iOff+=idx.length;
+    geo.dispose();
+  });
+
+  const merged=new THREE.BufferGeometry();
+  merged.setAttribute('position',new THREE.BufferAttribute(posArr,3));
+  merged.setAttribute('normal',new THREE.BufferAttribute(norArr,3));
+  merged.setIndex(new THREE.BufferAttribute(idxArr,1));
+  groups.forEach(g=>merged.addGroup(g.start,g.count,g.materialIndex));
+  return{geo:merged, mats};
 }
 
 function exportModel(fmt){
@@ -1311,8 +1613,8 @@ function exportFBX(fname){
 // GLTF/GLB — per-material-group primitives (sidewall-aware)
 function exportGLTF(fmt,fname){
   const meshInfos=[];
-  root.children.forEach(mesh=>{
-    if(!mesh.isMesh)return;
+
+  const processMesh=(mesh)=>{
     const geo=prepareExportMesh(mesh);
     const parts=splitGeoByMat(geo);
     parts.forEach(({materialIndex,pb,nb,ib,vCount,iCount,mn,mx})=>{
@@ -1321,7 +1623,14 @@ function exportGLTF(fmt,fname){
       meshInfos.push({pb,nb,ib,vCount,iCount,color:[r,g,b,1],mn,mx});
     });
     geo.dispose();
-  });
+  };
+
+  if(F.combinedExport){
+    // All layers → primitives in a single GLTF mesh node
+    root.children.filter(m=>m.isMesh).forEach(processMesh);
+  } else {
+    root.children.filter(m=>m.isMesh).forEach(processMesh);
+  }
   if(!meshInfos.length){alert('Nothing to export.');return;}
   const buffers=[],accessors=[],primitives=[],materials=[];
   meshInfos.forEach(({pb,nb,ib,vCount,iCount,color,mn,mx},mi)=>{
@@ -1335,8 +1644,13 @@ function exportGLTF(fmt,fname){
     materials.push({name:'mat_'+mi,pbrMetallicRoughness:{baseColorFactor:color,metallicFactor:0,roughnessFactor:1},doubleSided:true});
     primitives.push({attributes:{POSITION:ai,NORMAL:ai+1},indices:ai+2,material:mi});
   });
-  const nodes=primitives.map((_,i)=>({mesh:i}));
-  const meshDefs=primitives.map((prim,i)=>({name:'mesh_'+i,primitives:[prim]}));
+  // Combined: all primitives in 1 mesh node; Separate: one node per primitive
+  const nodes=F.combinedExport
+    ?[{mesh:0}]
+    :primitives.map((_,i)=>({mesh:i}));
+  const meshDefs=F.combinedExport
+    ?[{name:'combined',primitives}]
+    :primitives.map((prim,i)=>({name:'mesh_'+i,primitives:[prim]}));
   if(fmt==='gltf'){
     const bvs=[],allBufs=[];
     buffers.forEach(b=>{
